@@ -13,7 +13,9 @@ import Auth from './components/Auth';
 import OwnerDashboard from './components/OwnerDashboard';
 import CashierDashboard from './components/CashierDashboard';
 import PullToRefresh from './components/PullToRefresh';
+import ServerMaintenance from './components/ServerMaintenance';
 
+export const MAINTENANCE_MODE = true;
 function ExitPrompt() {
   const { toast } = useToast();
 
@@ -69,6 +71,17 @@ export default function App() {
           Loading...
         </span>
       </div>
+    );
+  }
+
+  if (MAINTENANCE_MODE) {
+    return (
+      <ToastProvider>
+        <ExitPrompt />
+        <PullToRefresh onRefresh={() => window.location.reload()}>
+          <ServerMaintenance onRetry={() => window.location.reload()} />
+        </PullToRefresh>
+      </ToastProvider>
     );
   }
 
