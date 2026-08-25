@@ -209,16 +209,16 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   }, []);
 
   const addToCart = (product: Product) => {
-    const isOutOfStock = product.use_stock !== false && (Number(product.stock) || 0) <= 0;
-    if (isOutOfStock) {
-      toast(`${product.name} is sold out (0 stock available).`, 'warning');
+    const availableStock = Number(product.stock) || 0;
+    if (product.use_stock !== false && 1 > availableStock) {
+      toast(`${product.name} is sold out (${availableStock} stock available).`, 'warning');
       return;
     }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
         const availableStock = Number(product.stock) || 0;
-        if (product.use_stock !== false && existing.quantity >= availableStock) {
+        if (product.use_stock !== false && (existing.quantity + 1) > availableStock) {
           toast(`Cannot add more than ${availableStock} units of ${product.name}`, 'warning');
           return prev;
         }
@@ -262,9 +262,9 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       p.barcode === barcode || p.sku === barcode
     );
     if (match) {
-      const isOutOfStock = match.use_stock !== false && (Number(match.stock) || 0) <= 0;
-      if (isOutOfStock) {
-        toast(`${match.name} is sold out (0 stock available).`, 'warning');
+      const availableStock = Number(match.stock) || 0;
+      if (match.use_stock !== false && 1 > availableStock) {
+        toast(`${match.name} is sold out (${availableStock} stock available).`, 'warning');
         return;
       }
       addToCart(match);
@@ -280,12 +280,13 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
         if (item.product.id === productId) {
           const newQty = item.quantity + delta;
           if (newQty <= 0) return null;
-          const availableStock = Number(item.product.stock) || 0;
+          const currentProduct = branchProducts.find(p => p.id === productId);
+          const availableStock = currentProduct ? (Number(currentProduct.stock) || 0) : (Number(item.product.stock) || 0);
           if (item.product.use_stock !== false && newQty > availableStock) {
             toast(`Stock limit: ${availableStock} units available.`, 'warning');
             return item;
           }
-          return { ...item, quantity: newQty };
+          return { ...item, quantity: newQty, product: currentProduct || item.product };
         }
         return item;
       }).filter(Boolean) as CartItem[];
