@@ -22,8 +22,7 @@ const productSchema = z.object({
   use_stock: z.boolean().default(true),
   stock: z.number().min(0, 'Stock cannot be negative').default(0),
   min_stock_level: z.number().min(0, 'Min stock cannot be negative').default(5),
-  expiry_date: z.string().optional(),
-  branch_id: z.string().optional()
+  expiry_date: z.string().optional()
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -94,8 +93,7 @@ export default function ProductModal({
       use_stock: editingProduct?.use_stock !== false,
       stock: editingProduct?.stock ?? computedTotalStock,
       min_stock_level: editingProduct?.min_stock_level ?? 5,
-      expiry_date: editingProduct?.expiry_date || '',
-      branch_id: editingProduct?.branch_id || (user.role === 'manager' && user.branch_id ? user.branch_id : '')
+      expiry_date: editingProduct?.expiry_date || ''
     }
   });
 
