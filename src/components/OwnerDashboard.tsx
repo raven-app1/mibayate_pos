@@ -63,7 +63,7 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
 
   const businessProfile = storeBusinessProfile || DEFAULT_BUSINESS_PROFILE;
 
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(user.role === 'manager' && user.branch_id ? user.branch_id : 'all');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'cashiers' | 'staff-performance' | 'transactions' | 'branches' | 'settings' | 'cash-flow' | 'label-generator' | 'sale-report' | 'delete-requests' | 'change-password'>(user.role === 'manager' ? 'products' : 'overview');
   const [selectedSingleProduct, setSelectedSingleProduct] = useState<Product | null>(null);
   const [showSingleLabelModal, setShowSingleLabelModal] = useState(false);

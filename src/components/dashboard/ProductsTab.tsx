@@ -318,15 +318,35 @@ export default function ProductsTab({
                       </div>
                       <div>
                         <p className="text-[8px] text-slate-400 uppercase font-bold">Stock</p>
-                        <span className={`inline-block font-mono text-[10px] font-bold ${
-                          isOutOfStock 
-                            ? 'text-red-600' 
-                            : isLowStock 
-                              ? 'text-gray-900' 
-                              : 'text-gray-900'
-                        }`}>
-                          {prod.stock} {prod.unit_name || 'ခု'}
-                        </span>
+                        {(() => {
+                          const totalStockAcrossAll = prod.stocks && prod.stocks.length > 0
+                            ? prod.stocks.reduce((sum: number, s) => sum + (Number(s.quantity) || 0), 0)
+                            : (Number(prod.stock) || 0);
+
+                          const otherBranchesWithStock = prod.stocks?.filter(s => {
+                            const qty = Number(s.quantity) || 0;
+                            return qty > 0 && s.branch_id !== selectedBranchId;
+                          }) || [];
+
+                          return (
+                            <div>
+                              <span className={`inline-block font-mono text-[10px] font-bold ${
+                                isOutOfStock 
+                                  ? (otherBranchesWithStock.length > 0 ? 'text-amber-700' : 'text-red-600') 
+                                  : isLowStock 
+                                    ? 'text-gray-900' 
+                                    : 'text-gray-900'
+                              }`}>
+                                {prod.stock} {prod.unit_name || 'ခု'}
+                              </span>
+                              {selectedBranchId !== 'all' && otherBranchesWithStock.length > 0 && (
+                                <p className="text-[8px] text-slate-500 font-medium leading-tight mt-0.5">
+                                  ({totalStockAcrossAll} in other outlets)
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -446,17 +466,42 @@ export default function ProductsTab({
 
                         {/* Stock */}
                         <td className="p-3 text-center border-r border-slate-100">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
-                            isOutOfStock 
-                              ? 'bg-red-100 text-red-800' 
-                              : isLowStock 
-                                ? 'bg-gray-100 text-gray-900' 
-                                : 'bg-gray-100 text-gray-900'
-                          }`}>
-                            {prod.stock}
-                          </span>
-                        </td>
+                          {(() => {
+                            const totalStockAcrossAll = prod.stocks && prod.stocks.length > 0
+                              ? prod.stocks.reduce((sum: number, s) => sum + (Number(s.quantity) || 0), 0)
+                              : (Number(prod.stock) || 0);
 
+                            const otherBranchesWithStock = prod.stocks?.filter(s => {
+                              const qty = Number(s.quantity) || 0;
+                              return qty > 0 && s.branch_id !== selectedBranchId;
+                            }) || [];
+
+                            return (
+                              <div className="flex flex-col items-center justify-center gap-0.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
+                                  isOutOfStock 
+                                    ? (otherBranchesWithStock.length > 0 ? 'bg-amber-100 text-amber-900 font-bold' : 'bg-red-100 text-red-800') 
+                                    : isLowStock 
+                                      ? 'bg-amber-100 text-amber-900' 
+                                      : 'bg-gray-100 text-gray-900'
+                                }`}>
+                                  {prod.stock} {prod.unit_name || 'pcs'}
+                                </span>
+                                {selectedBranchId !== 'all' && otherBranchesWithStock.length > 0 && (
+                                  <span 
+                                    className="text-[9px] text-slate-500 font-semibold cursor-help"
+                                    title={otherBranchesWithStock.map(s => {
+                                      const bName = branches.find(b => b.id === s.branch_id)?.name || s.branch_id;
+                                      return `${bName}: ${s.quantity} ${prod.unit_name || 'pcs'}`;
+                                    }).join('\n')}
+                                  >
+                                    ({totalStockAcrossAll} total in other outlets)
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         {/* Price Variant */}
                         <td className="p-3 text-slate-500 border-r border-slate-100">
                           {prod.price_variant || '-'}
