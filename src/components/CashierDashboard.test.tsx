@@ -147,23 +147,47 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
     vi.mocked(dbService.products.getAll).mockResolvedValue(mockProducts);
   });
 
-  it('hides sold out items by default when search query is empty', async () => {
+  it('displays sold out items by default and shows in-stock items first', async () => {
     render(<CashierDashboard user={mockUser} onLogout={vi.fn()} />);
 
-    // In-stock items should be visible
+    // Wait for products to load
     await waitFor(() => {
       expect(screen.getByText('In Stock Apple')).toBeInTheDocument();
-      expect(screen.getByText('Orange Juice Bottle')).toBeInTheDocument();
-      expect(screen.getByText('Delivery Service (No Stock Tracking)')).toBeInTheDocument();
     });
 
-    // Sold out items should NOT be visible in default view
-    expect(screen.queryByText('Sold Out Banana')).not.toBeInTheDocument();
-    expect(screen.queryByText('Sold Out Cherry Negative')).not.toBeInTheDocument();
-    expect(screen.queryByText('Sold Out Cola Can')).not.toBeInTheDocument();
+    // Both in-stock and sold-out items should be visible
+    expect(screen.getByText('In Stock Apple')).toBeInTheDocument();
+    expect(screen.getByText('Orange Juice Bottle')).toBeInTheDocument();
+    expect(screen.getByText('Delivery Service (No Stock Tracking)')).toBeInTheDocument();
+    expect(screen.getByText('Sold Out Banana')).toBeInTheDocument();
+    expect(screen.getByText('Sold Out Cherry Negative')).toBeInTheDocument();
+    expect(screen.getByText('Sold Out Cola Can')).toBeInTheDocument();
+
+    // Verify that sold-out items are disabled with Sold Out badge
+    const bananaButton = screen.getByText('Sold Out Banana').closest('button');
+    expect(bananaButton).toBeDisabled();
+    expect(screen.getAllByText('Sold Out').length).toBe(3);
+
+    // Verify order: in-stock items appear before sold-out items
+    const productButtons = screen.getAllByRole('button').filter(btn => btn.classList.contains('android-card'));
+    const productNames = productButtons.map(btn => btn.querySelector('span')?.textContent);
+
+    const inStockAppleIdx = productNames.indexOf('In Stock Apple');
+    const orangeJuiceIdx = productNames.indexOf('Orange Juice Bottle');
+    const deliveryServiceIdx = productNames.indexOf('Delivery Service (No Stock Tracking)');
+    const soldOutBananaIdx = productNames.indexOf('Sold Out Banana');
+    const soldOutCherryIdx = productNames.indexOf('Sold Out Cherry Negative');
+    const soldOutColaIdx = productNames.indexOf('Sold Out Cola Can');
+
+    // All in-stock/service items must appear before all sold-out items
+    expect(inStockAppleIdx).toBeLessThan(soldOutBananaIdx);
+    expect(orangeJuiceIdx).toBeLessThan(soldOutBananaIdx);
+    expect(deliveryServiceIdx).toBeLessThan(soldOutBananaIdx);
+    expect(inStockAppleIdx).toBeLessThan(soldOutCherryIdx);
+    expect(inStockAppleIdx).toBeLessThan(soldOutColaIdx);
   });
 
-  it('displays sold out items when search query is active / not empty', async () => {
+  it('displays sold out items when search query is active / not empty, with in-stock first', async () => {
     render(<CashierDashboard user={mockUser} onLogout={vi.fn()} />);
 
     await waitFor(() => {
@@ -173,7 +197,7 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
     const searchInput = screen.getByPlaceholderText(/search products by name/i);
     fireEvent.change(searchInput, { target: { value: 'Sold Out' } });
 
-    // Both sold out products matching the search query should be rendered
+    // Sold out products matching the search query should be rendered
     await waitFor(() => {
       expect(screen.getByText('Sold Out Banana')).toBeInTheDocument();
       expect(screen.getByText('Sold Out Cherry Negative')).toBeInTheDocument();
@@ -189,7 +213,7 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
     expect(bananaButton).toBeDisabled();
   });
 
-  it('hides sold out items during category browsing when search query is empty', async () => {
+  it('displays both in-stock and sold-out items during category browsing, with in-stock items first', async () => {
     render(<CashierDashboard user={mockUser} onLogout={vi.fn()} />);
 
     await waitFor(() => {
@@ -207,11 +231,20 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
     await waitFor(() => {
       // In-stock item in Beverages is shown
       expect(screen.getByText('Orange Juice Bottle')).toBeInTheDocument();
-      // Sold-out item in Beverages is NOT shown
-      expect(screen.queryByText('Sold Out Cola Can')).not.toBeInTheDocument();
+      // Sold-out item in Beverages is ALSO shown
+      expect(screen.getByText('Sold Out Cola Can')).toBeInTheDocument();
       // Items from other categories are NOT shown
       expect(screen.queryByText('In Stock Apple')).not.toBeInTheDocument();
     });
+
+    // In-stock item appears before sold out item
+    const productButtons = screen.getAllByRole('button').filter(btn => btn.classList.contains('android-card'));
+    const productNames = productButtons.map(btn => btn.querySelector('span')?.textContent);
+    expect(productNames.indexOf('Orange Juice Bottle')).toBeLessThan(productNames.indexOf('Sold Out Cola Can'));
+
+    // Sold out cola can is disabled with Sold Out badge
+    const colaButton = screen.getByText('Sold Out Cola Can').closest('button');
+    expect(colaButton).toBeDisabled();
   });
 
   it('shows sold out items matching search even within a selected category', async () => {
@@ -405,7 +438,7 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
     vi.mocked(dbService.products.getAll).mockResolvedValue(multiBranchProducts);
   });
 
-  it('strictly displays Branch-1 stock and treats items with stock only in Branch-2 as Sold Out', async () => {
+  it('strictly displays Branch-1 stock, showing in-stock items first and Branch-1 sold-out items as Sold Out', async () => {
     render(<CashierDashboard user={branch1Cashier} onLogout={vi.fn()} />);
 
     // In Branch 1, Shared T-Shirt has 5 left
@@ -414,11 +447,16 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
       expect(screen.getByText('5 left')).toBeInTheDocument();
     });
 
-    // In Branch 1, Airport Exclusive Denim Pants (30 in b2, 0 in b1) and Downtown Running Shoes (0 in b1) are sold out
-    // They should NOT be visible by default (hidden when not searching)
-    expect(screen.queryByText('Airport Exclusive Denim Pants')).not.toBeInTheDocument();
-    expect(screen.queryByText('Downtown Running Shoes')).not.toBeInTheDocument();
-    expect(screen.queryByText('Legacy Airport Souvenir')).not.toBeInTheDocument();
+    // In Branch 1, Airport Exclusive Denim Pants (30 in b2, 0 in b1), Downtown Running Shoes (0 in b1), and Legacy Airport Souvenir (b2 only) are sold out
+    // They should be visible in cashier terminal with Sold Out badges
+    expect(screen.getByText('Airport Exclusive Denim Pants')).toBeInTheDocument();
+    expect(screen.getByText('Downtown Running Shoes')).toBeInTheDocument();
+    expect(screen.getByText('Legacy Airport Souvenir')).toBeInTheDocument();
+
+    // Verify sold out buttons are disabled
+    expect(screen.getByText('Airport Exclusive Denim Pants').closest('button')).toBeDisabled();
+    expect(screen.getByText('Downtown Running Shoes').closest('button')).toBeDisabled();
+    expect(screen.getByText('Legacy Airport Souvenir').closest('button')).toBeDisabled();
 
     // Legacy Downtown Mug (branch-1) is visible with 8 left
     expect(screen.getByText('Legacy Downtown Mug')).toBeInTheDocument();
@@ -426,6 +464,23 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
 
     // Unlimited Service is visible
     expect(screen.getByText('Shoe Cleaning Service')).toBeInTheDocument();
+
+    // Verify order: in-stock items appear first before sold out items
+    const productButtons = screen.getAllByRole('button').filter(btn => btn.classList.contains('android-card'));
+    const productNames = productButtons.map(btn => btn.querySelector('span')?.textContent);
+
+    const tShirtIdx = productNames.indexOf('Shared MultiBranch T-Shirt');
+    const mugIdx = productNames.indexOf('Legacy Downtown Mug');
+    const serviceIdx = productNames.indexOf('Shoe Cleaning Service');
+    const pantsIdx = productNames.indexOf('Airport Exclusive Denim Pants');
+    const shoesIdx = productNames.indexOf('Downtown Running Shoes');
+    const souvenirIdx = productNames.indexOf('Legacy Airport Souvenir');
+
+    expect(tShirtIdx).toBeLessThan(pantsIdx);
+    expect(mugIdx).toBeLessThan(pantsIdx);
+    expect(serviceIdx).toBeLessThan(pantsIdx);
+    expect(tShirtIdx).toBeLessThan(shoesIdx);
+    expect(tShirtIdx).toBeLessThan(souvenirIdx);
   });
 
   it('shows Sold Out badge and disables adding to cart when searching for other branch items', async () => {
@@ -448,7 +503,7 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
     expect(screen.getByText('Sold Out')).toBeInTheDocument();
   });
 
-  it('allows Branch-2 cashier to see and sell items in Branch-2 stock', async () => {
+  it('allows Branch-2 cashier to see Branch-2 items with in-stock items first and sold-out items last', async () => {
     render(<CashierDashboard user={branch2Cashier} onLogout={vi.fn()} />);
 
     await waitFor(() => {
@@ -456,11 +511,11 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
       expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
       expect(screen.getByText('20 left')).toBeInTheDocument();
 
-      // Airport Exclusive Denim Pants has 30 in Branch 2 -> visible by default
+      // Airport Exclusive Denim Pants has 30 in Branch 2 -> visible and in stock
       expect(screen.getByText('Airport Exclusive Denim Pants')).toBeInTheDocument();
       expect(screen.getByText('30 left')).toBeInTheDocument();
 
-      // Downtown Running Shoes has 15 in Branch 2 -> visible by default
+      // Downtown Running Shoes has 15 in Branch 2 -> visible and in stock
       expect(screen.getByText('Downtown Running Shoes')).toBeInTheDocument();
       expect(screen.getByText('15 left')).toBeInTheDocument();
 
@@ -469,8 +524,17 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
       expect(screen.getByText('10 left')).toBeInTheDocument();
     });
 
-    // Legacy Downtown Mug belongs to Branch-1, so it is sold out in Branch-2
-    expect(screen.queryByText('Legacy Downtown Mug')).not.toBeInTheDocument();
+    // Legacy Downtown Mug belongs to Branch-1, so it is sold out in Branch-2 but visible
+    expect(screen.getByText('Legacy Downtown Mug')).toBeInTheDocument();
+    const mugButton = screen.getByText('Legacy Downtown Mug').closest('button');
+    expect(mugButton).toBeDisabled();
+
+    // Verify in-stock items come before sold out items in Branch-2
+    const productButtons = screen.getAllByRole('button').filter(btn => btn.classList.contains('android-card'));
+    const productNames = productButtons.map(btn => btn.querySelector('span')?.textContent);
+    const mugIdx = productNames.indexOf('Legacy Downtown Mug');
+    const denimIdx = productNames.indexOf('Airport Exclusive Denim Pants');
+    expect(denimIdx).toBeLessThan(mugIdx);
 
     // Branch 2 cashier can add Denim Pants to cart
     fireEvent.click(screen.getByText('Airport Exclusive Denim Pants'));

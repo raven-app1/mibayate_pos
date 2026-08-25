@@ -350,30 +350,19 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
 
   const categories = useMemo(() => ['All', ...Array.from(new Set(branchProducts.map(p => p.category)))], [branchProducts]);
 
-  const availableBranchProducts = useMemo(() => {
-    return branchProducts.filter(p => !isProductOutOfStock(p));
-  }, [branchProducts]);
-
   const categoryOptions = useMemo(() => {
-    const sourceList = isSearching ? branchProducts : availableBranchProducts;
-    const opts = [{ value: 'All', label: 'All Categories', count: sourceList.length }];
+    const opts = [{ value: 'All', label: 'All Categories', count: branchProducts.length }];
     categories.filter(c => c !== 'All').forEach(cat => {
-      opts.push({ value: cat, label: cat, count: sourceList.filter(p => p.category === cat).length });
+      opts.push({ value: cat, label: cat, count: branchProducts.filter(p => p.category === cat).length });
     });
     return opts;
-  }, [categories, branchProducts, availableBranchProducts, isSearching]);
+  }, [categories, branchProducts]);
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return branchProducts.filter(p => {
+    const matched = branchProducts.filter(p => {
       if (!p) return false;
-      const isOutOfStock = isProductOutOfStock(p);
-
-      // When not searching (default view or category browsing), hide sold-out items
-      if (!isSearching && isOutOfStock) {
-        return false;
-      }
 
       const name = (p.name || '').toLowerCase();
       const sku = (p.sku || '').toLowerCase();
@@ -388,6 +377,13 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
 
       return matchesSearch && matchesCategory;
+    });
+
+    return matched.sort((a, b) => {
+      const aOut = isProductOutOfStock(a);
+      const bOut = isProductOutOfStock(b);
+      if (aOut === bOut) return 0;
+      return aOut ? 1 : -1;
     });
   }, [branchProducts, searchQuery, isSearching, selectedCategory]);
 
