@@ -44,13 +44,14 @@ export interface ProductStock {
   updated_at?: string;
 }
 
-export interface Product {
+/** Exact database row — no computed/joined fields */
+export interface ProductRow {
   id: string;
   name: string;
   sku: string;
   barcode: string;
-  price: number; // Unit Price
-  cost: number; // Purchased Price
+  price: number;
+  cost: number;
   min_stock_level: number;
   category: string;
   image?: string | null;
@@ -59,9 +60,13 @@ export interface Product {
   unit_amount?: number;
   unit_name?: string;
   price_variant?: string;
-  expiry_date?: string;
+  expiry_date?: string | null;
   updated_at?: string;
   created_at: string;
+}
+
+/** View model: DB row + computed/joined fields for display */
+export interface Product extends ProductRow {
   // Joined / computed fields for branch-specific or total inventory display
   stock?: number;
   branch_id?: string;

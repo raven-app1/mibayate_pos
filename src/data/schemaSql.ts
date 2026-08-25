@@ -255,8 +255,8 @@ CREATE TABLE public.products (
     unit_amount     NUMERIC DEFAULT 1,
     unit_name       TEXT DEFAULT 'pcs',
     price_variant   TEXT,
-    expiry_date     TEXT,
-    updated_at      TEXT,
+    expiry_date     DATE,
+    updated_at      TIMESTAMPTZ DEFAULT timezone('Asia/Yangon', now()),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT timezone('Asia/Yangon', now())
 );
 
@@ -282,9 +282,12 @@ CREATE POLICY "Authorized users can insert products"
     AND public.current_user_is_manager_or_owner()
   );
 
-CREATE POLICY "Authenticated users can update products"
+CREATE POLICY "Authorized users can update products"
   ON public.products FOR UPDATE
-  USING (auth.role() = 'authenticated');
+  USING (
+    auth.role() = 'authenticated'
+    AND public.current_user_is_manager_or_owner()
+  );
 
 CREATE POLICY "Authorized users can delete products"
   ON public.products FOR DELETE
@@ -321,7 +324,10 @@ CREATE POLICY "Authorized users can insert product_stock"
 
 CREATE POLICY "Authorized users can update product_stock"
   ON public.product_stock FOR UPDATE
-  USING (auth.role() = 'authenticated');
+  USING (
+    auth.role() = 'authenticated'
+    AND public.current_user_can_manage_product(branch_id)
+  );
 
 CREATE POLICY "Authorized users can delete product_stock"
   ON public.product_stock FOR DELETE
@@ -400,9 +406,21 @@ CREATE POLICY "Authenticated users can read sale_items"
   ON public.sale_items FOR SELECT
   USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Authenticated users can insert sale_items"
+CREATE POLICY "Authorized users can insert sale_items"
   ON public.sale_items FOR INSERT
-  WITH CHECK (auth.role() = 'authenticated');
+  WITH CHECK (
+    auth.role() = 'authenticated'
+    AND (
+      EXISTS (
+        SELECT 1 FROM public.sales s
+        WHERE s.id = sale_id
+        AND (
+          s.cashier_id = auth.uid()
+          OR public.current_user_can_access_branch(s.branch_id)
+        )
+      )
+    )
+  );
 
 CREATE POLICY "Authorized users can delete sale_items (void)"
   ON public.sale_items FOR DELETE
@@ -560,9 +578,24 @@ GRANT EXECUTE ON FUNCTION public.delete_user_account(uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.deduct_product_stock(p_product_id text, p_branch_id text, p_qty int)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_current int;
 BEGIN
+  SELECT quantity INTO v_current
+  FROM public.product_stock
+  WHERE product_id = p_product_id AND branch_id = p_branch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No stock record for product "%" at branch "%"', p_product_id, p_branch_id;
+  END IF;
+
+  IF v_current < p_qty THEN
+    RAISE EXCEPTION 'Insufficient stock: available %, requested %', v_current, p_qty;
+  END IF;
+
   UPDATE public.product_stock
-  SET quantity = GREATEST(0, quantity - p_qty),
+  SET quantity = quantity - p_qty,
       updated_at = timezone('Asia/Yangon', now())
   WHERE product_id = p_product_id AND branch_id = p_branch_id;
 END;
