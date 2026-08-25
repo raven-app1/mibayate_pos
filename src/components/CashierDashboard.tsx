@@ -209,12 +209,17 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   }, []);
 
   const addToCart = (product: Product) => {
-    if (product.stock === 0) return;
+    const isOutOfStock = product.use_stock !== false && (Number(product.stock) || 0) <= 0;
+    if (isOutOfStock) {
+      toast(`${product.name} is sold out (0 stock available).`, 'warning');
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
-        if (existing.quantity >= product.stock) {
-          toast(`Cannot add more than ${product.stock} units of ${product.name}`, 'warning');
+        const availableStock = Number(product.stock) || 0;
+        if (product.use_stock !== false && existing.quantity >= availableStock) {
+          toast(`Cannot add more than ${availableStock} units of ${product.name}`, 'warning');
           return prev;
         }
         return prev.map(item =>
@@ -249,6 +254,11 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       p.barcode === barcode || p.sku === barcode
     );
     if (match) {
+      const isOutOfStock = match.use_stock !== false && (Number(match.stock) || 0) <= 0;
+      if (isOutOfStock) {
+        toast(`${match.name} is sold out (0 stock available).`, 'warning');
+        return;
+      }
       addToCart(match);
       toast(`${match.name} added to cart`, 'success');
     } else {
@@ -262,8 +272,9 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
         if (item.product.id === productId) {
           const newQty = item.quantity + delta;
           if (newQty <= 0) return null;
-          if (newQty > item.product.stock) {
-            toast(`Stock limit: ${item.product.stock} units available.`, 'warning');
+          const availableStock = Number(item.product.stock) || 0;
+          if (item.product.use_stock !== false && newQty > availableStock) {
+            toast(`Stock limit: ${availableStock} units available.`, 'warning');
             return item;
           }
           return { ...item, quantity: newQty };
@@ -308,25 +319,45 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   };
 
 
+  const isSearching = searchQuery.trim().length > 0;
+
   const categories = useMemo(() => ['All', ...Array.from(new Set(branchProducts.map(p => p.category)))], [branchProducts]);
 
+  const availableBranchProducts = useMemo(() => {
+    return branchProducts.filter(p => p.use_stock === false || (Number(p.stock) || 0) > 0);
+  }, [branchProducts]);
+
   const categoryOptions = useMemo(() => {
-    const opts = [{ value: 'All', label: 'All Categories', count: branchProducts.length }];
+    const sourceList = isSearching ? branchProducts : availableBranchProducts;
+    const opts = [{ value: 'All', label: 'All Categories', count: sourceList.length }];
     categories.filter(c => c !== 'All').forEach(cat => {
-      opts.push({ value: cat, label: cat, count: branchProducts.filter(p => p.category === cat).length });
+      opts.push({ value: cat, label: cat, count: sourceList.filter(p => p.category === cat).length });
     });
     return opts;
-  }, [categories, branchProducts]);
+  }, [categories, branchProducts, availableBranchProducts, isSearching]);
 
   const filteredProducts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
     return branchProducts.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            p.barcode.toLowerCase().includes(searchQuery.toLowerCase());
+      const isOutOfStock = p.use_stock !== false && (Number(p.stock) || 0) <= 0;
+
+      // When not searching (default view or category browsing), hide sold-out items
+      if (!isSearching && isOutOfStock) {
+        return false;
+      }
+
+      const matchesSearch = !isSearching || (
+        (p.name && p.name.toLowerCase().includes(query)) ||
+        (p.sku && p.sku.toLowerCase().includes(query)) ||
+        (p.barcode && p.barcode.toLowerCase().includes(query))
+      );
+
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+
       return matchesSearch && matchesCategory;
     });
-  }, [branchProducts, searchQuery, selectedCategory]);
+  }, [branchProducts, searchQuery, isSearching, selectedCategory]);
 
   const cartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -607,8 +638,8 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-4">
                     {filteredProducts.map((prod) => {
-                      const isOutOfStock = prod.stock === 0;
-                      const isLowStock = prod.stock <= prod.min_stock_level;
+                      const isOutOfStock = prod.use_stock !== false && (Number(prod.stock) || 0) <= 0;
+                      const isLowStock = prod.use_stock !== false && (Number(prod.stock) || 0) <= (prod.min_stock_level ?? 5);
                       const inCartCount = cart.find(item => item.product.id === prod.id)?.quantity || 0;
                       return (
                         <button
