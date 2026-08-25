@@ -255,11 +255,14 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     setRestockProduct(prod);
   };
 
-  const handleQuickRestock = async (productId: string, quantity: number) => {
+  const handleQuickRestock = async (productId: string, quantity: number, modalBranchId?: string) => {
     if (isRestocking) return;
     setIsRestocking(true);
     try {
-      const targetBranchId = selectedBranchId !== 'all' ? selectedBranchId : (user.role === 'manager' && user.branch_id ? user.branch_id : undefined);
+      let targetBranchId = modalBranchId;
+      if (!targetBranchId) {
+        targetBranchId = selectedBranchId !== 'all' ? selectedBranchId : (user.role === 'manager' && user.branch_id ? user.branch_id : undefined);
+      }
       const targetBranchName = targetBranchId ? branches.find(b => b.id === targetBranchId)?.name : undefined;
       await dbService.products.restock(productId, quantity, user.name, targetBranchId, targetBranchName);
       await loadData();
@@ -2016,6 +2019,9 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
         isOpen={restockProduct !== null}
         onClose={() => setRestockProduct(null)}
         onRestock={handleQuickRestock}
+        branches={branches}
+        requireBranchSelection={selectedBranchId === 'all' && user.role !== 'manager'}
+        defaultBranchId={selectedBranchId !== 'all' ? selectedBranchId : ''}
       />
 
       {/* Bottom Navigation Bar - Android Material Design (Hidden on Desktop) */}

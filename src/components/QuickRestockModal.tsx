@@ -8,7 +8,10 @@ interface QuickRestockModalProps {
   product: Product | null;
   isOpen: boolean;
   onClose: () => void;
-  onRestock: (productId: string, quantity: number) => Promise<void>;
+  onRestock: (productId: string, quantity: number, branchId?: string) => Promise<void>;
+  branches?: { id: string; name: string }[];
+  requireBranchSelection?: boolean;
+  defaultBranchId?: string;
 }
 
 export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
@@ -16,8 +19,12 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
   isOpen,
   onClose,
   onRestock,
+  branches = [],
+  requireBranchSelection = false,
+  defaultBranchId = '',
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { toast } = useToast();
@@ -25,6 +32,7 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setQuantity(1);
+      setSelectedBranchId(defaultBranchId || (branches.length === 1 ? branches[0].id : ''));
       setErrorMsg(null);
       setIsSaving(false);
     }
@@ -35,6 +43,11 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
 
   const handleSave = async () => {
     if (!product || isSaving) return;
+    if (requireBranchSelection && !selectedBranchId) {
+      setErrorMsg('Please select a branch to restock.');
+      toast('Please select a branch to restock.', 'error');
+      return;
+    }
     if (!quantity || quantity <= 0) {
       setErrorMsg('Please enter a quantity greater than zero.');
       toast('Please enter a quantity greater than zero.', 'error');
@@ -43,7 +56,7 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      await onRestock(product.id, quantity);
+      await onRestock(product.id, quantity, requireBranchSelection ? selectedBranchId : undefined);
       setIsSaving(false);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to restock product.');
@@ -96,6 +109,25 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Branch selector */}
+          {requireBranchSelection && branches.length > 0 && (
+            <div>
+              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">
+                Select Branch <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-black shadow-2xs"
+              >
+                <option value="" disabled>-- Select a branch --</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Quantity stepper */}
           <div>
