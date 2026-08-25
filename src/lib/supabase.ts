@@ -542,7 +542,7 @@ export const dbService = {
       ] = await Promise.all([
         supabase
           .from('products')
-          .select('*')
+          .select('*, product_stock(*)')
           .order('created_at', { ascending: false, nullsFirst: false }),
         supabase
           .from('product_stock')
@@ -552,8 +552,19 @@ export const dbService = {
           .select('*')
       ]);
 
-      if (prodErr) throw prodErr;
-      if (stockErr) throw stockErr;
+      if (prodErr) {
+        // Fallback to simple select if nested join failed
+        const { data: fallbackProducts, error: fallbackErr } = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false, nullsFirst: false });
+        if (fallbackErr) throw fallbackErr;
+        return (fallbackProducts || []).map(p => ({ ...p, stock: Number(p.stock) || 0, stocks: [] }));
+      }
+
+      if (stockErr) {
+        console.warn('Direct product_stock query note:', stockErr);
+      }
 
       const allBranches: Branch[] = branchesData || [];
 
@@ -573,7 +584,14 @@ export const dbService = {
 
       return (products || []).map(p => {
         const pKey = String(p.id || '').trim().toLowerCase();
-        const prodStocks = stocksByProduct.get(pKey) || [];
+        const embeddedStocks = (p as Record<string, unknown>).product_stock as ProductStock[] | undefined;
+        const prodStocks: ProductStock[] = (Array.isArray(embeddedStocks) && embeddedStocks.length > 0)
+          ? embeddedStocks.map(st => ({
+              ...st,
+              quantity: Number(st.quantity ?? (st as unknown as Record<string, unknown>).stock ?? 0) || 0
+            }))
+          : (stocksByProduct.get(pKey) || []);
+
         let stock = 0;
         let branchId: string | undefined = undefined;
 
