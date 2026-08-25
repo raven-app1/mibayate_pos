@@ -230,8 +230,8 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       if (!user.branch_id) return p;
       let branchStock = 0;
       if (p.stocks && p.stocks.length > 0) {
-        const match = p.stocks.find(s => s.branch_id === user.branch_id);
-        branchStock = match ? (Number(match.quantity) || 0) : 0;
+        const match = p.stocks.find(s => s.branch_id === user.branch_id || s.branch_id.toLowerCase() === user.branch_id?.toLowerCase());
+        branchStock = match ? (Number(match.quantity) || 0) : (Number(p.stock) || 0);
       } else {
         branchStock = Number(p.stock) || 0;
       }

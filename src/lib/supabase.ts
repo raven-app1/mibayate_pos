@@ -535,18 +535,27 @@ export const dbService = {
   products: {
     async getAll(selectedBranchId?: string): Promise<Product[]> {
       if (!supabase) throw new Error('Supabase not configured.');
-      const [{ data: products, error: prodErr }, { data: stocks, error: stockErr }] = await Promise.all([
+      const [
+        { data: products, error: prodErr },
+        { data: stocks, error: stockErr },
+        { data: branchesData }
+      ] = await Promise.all([
         supabase
           .from('products')
           .select('*')
           .order('created_at', { ascending: false, nullsFirst: false }),
         supabase
           .from('product_stock')
+          .select('*'),
+        supabase
+          .from('branches')
           .select('*')
       ]);
 
       if (prodErr) throw prodErr;
       if (stockErr) throw stockErr;
+
+      const allBranches: Branch[] = branchesData || [];
 
       const stocksByProduct = new Map<string, ProductStock[]>();
       (stocks || []).forEach(st => {
@@ -561,7 +570,22 @@ export const dbService = {
         let branchId: string | undefined = undefined;
 
         if (selectedBranchId && selectedBranchId !== 'all') {
-          const match = prodStocks.find(s => s.branch_id === selectedBranchId);
+          const targetBranch = allBranches.find(b =>
+            b.id.toLowerCase() === selectedBranchId.toLowerCase() ||
+            b.code.toLowerCase() === selectedBranchId.toLowerCase() ||
+            b.name.toLowerCase() === selectedBranchId.toLowerCase()
+          );
+
+          const match = prodStocks.find(s => {
+            if (s.branch_id === selectedBranchId || s.branch_id.toLowerCase() === selectedBranchId.toLowerCase()) return true;
+            if (targetBranch) {
+              return s.branch_id.toLowerCase() === targetBranch.id.toLowerCase() ||
+                     s.branch_id.toLowerCase() === targetBranch.code.toLowerCase() ||
+                     s.branch_id.toLowerCase() === targetBranch.name.toLowerCase();
+            }
+            return false;
+          });
+
           if (match) {
             stock = Number(match.quantity ?? (match as unknown as Record<string, unknown>).stock ?? 0) || 0;
           } else if (prodStocks.length === 0) {
@@ -569,7 +593,7 @@ export const dbService = {
           } else {
             stock = 0;
           }
-          branchId = selectedBranchId;
+          branchId = targetBranch ? targetBranch.id : selectedBranchId;
         } else {
           // Cross-branch total stock: SUM(quantity) from product_stock
           if (prodStocks.length > 0) {

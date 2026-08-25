@@ -342,6 +342,20 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     return unsubscribe;
   }, []);
 
+  // Auto-align manager's selectedBranchId to canonical branch ID when branches load
+  useEffect(() => {
+    if (user.role === 'manager' && user.branch_id && branches.length > 0) {
+      const canonical = branches.find(b => 
+        b.id.toLowerCase() === user.branch_id?.toLowerCase() ||
+        b.code.toLowerCase() === user.branch_id?.toLowerCase() ||
+        b.name.toLowerCase() === user.branch_id?.toLowerCase()
+      );
+      if (canonical && selectedBranchId !== canonical.id) {
+        setSelectedBranchId(canonical.id);
+      }
+    }
+  }, [user.branch_id, user.role, branches, selectedBranchId]);
+
   // Filter sales/products by selectedBranchId
   const displaySales = useMemo(() => {
     return selectedBranchId === 'all' 
@@ -353,7 +367,7 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     if (selectedBranchId === 'all') {
       return products.map(p => {
         const total = p.stocks && p.stocks.length > 0
-          ? p.stocks.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0)
+          ? p.stocks.reduce((sum: number, s) => sum + (Number(s.quantity) || 0), 0)
           : (Number(p.stock) || 0);
         return {
           ...p,
@@ -361,11 +375,27 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
         };
       });
     }
-    const branchName = branches.find(b => b.id === selectedBranchId)?.name;
+
+    const targetBranch = branches.find(b => 
+      b.id.toLowerCase() === selectedBranchId.toLowerCase() ||
+      b.code.toLowerCase() === selectedBranchId.toLowerCase() ||
+      b.name.toLowerCase() === selectedBranchId.toLowerCase()
+    );
+    const branchName = targetBranch?.name;
+    const branchId = targetBranch?.id || selectedBranchId;
+
     return products.map(p => {
       let branchStock = 0;
       if (p.stocks && p.stocks.length > 0) {
-        const match = p.stocks.find(s => s.branch_id === selectedBranchId);
+        const match = p.stocks.find(s => {
+          if (s.branch_id === selectedBranchId || s.branch_id.toLowerCase() === selectedBranchId.toLowerCase()) return true;
+          if (targetBranch) {
+            return s.branch_id.toLowerCase() === targetBranch.id.toLowerCase() ||
+                   s.branch_id.toLowerCase() === targetBranch.code.toLowerCase() ||
+                   s.branch_id.toLowerCase() === targetBranch.name.toLowerCase();
+          }
+          return false;
+        });
         branchStock = match ? (Number(match.quantity) || 0) : 0;
       } else {
         branchStock = Number(p.stock) || 0;
@@ -373,7 +403,7 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
       return {
         ...p,
         stock: branchStock,
-        branch_id: selectedBranchId,
+        branch_id: branchId,
         branch_name: branchName
       };
     });
