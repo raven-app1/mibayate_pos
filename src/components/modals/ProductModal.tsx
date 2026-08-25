@@ -141,7 +141,7 @@ export default function ProductModal({
     try {
       const targetBranchId = user.role === 'manager'
         ? (editingProduct?.branch_id || user.branch_id || null)
-        : (data.branch_id || null);
+        : (editingProduct?.branch_id || null);
       const selectedBranch = branches.find(b => b.id === targetBranchId);
       
       const stocksList: ProductStock[] = branches.map(b => ({
@@ -514,25 +514,6 @@ export default function ProductModal({
                   />
                 </div>
               </div>
-                <div className="sm:col-span-3">
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                    Branch Outlet Assignment {user.role === 'manager' && <span className="text-slate-400 font-normal lowercase">(assigned branch)</span>}
-                  </label>
-                  <select
-                    {...register('branch_id')}
-                    disabled={user.role === 'manager'}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-gray-900 font-medium disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                  >
-                    {user.role !== 'manager' && (
-                      <option value="">🏢 Global Inventory / All Store Outlets</option>
-                    )}
-                    {branches.map(b => (
-                      <option key={b.id} value={b.id}>
-                        📍 {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
 
