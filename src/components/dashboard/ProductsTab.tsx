@@ -90,10 +90,16 @@ export default function ProductsTab({
     });
 
     return [...list].sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      if (timeA !== timeB) return timeB - timeA;
-      return (a.name || '').localeCompare(b.name || '');
+      const isTrackedA = a.use_stock !== false && (a.use_stock as unknown) !== 'false';
+      const isTrackedB = b.use_stock !== false && (b.use_stock as unknown) !== 'false';
+      const aOutOfStock = isTrackedA && (Number(a.stock) || 0) <= 0;
+      const bOutOfStock = isTrackedB && (Number(b.stock) || 0) <= 0;
+
+      if (aOutOfStock !== bOutOfStock) {
+        return aOutOfStock ? 1 : -1;
+      }
+      const cmp = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+      return cmp !== 0 ? cmp : (a.name || '').localeCompare(b.name || '');
     });
   }, [displayProducts, productSearch, categoryFilter, stockFilter]);
 
