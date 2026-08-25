@@ -559,13 +559,21 @@ export const dbService = {
 
       const stocksByProduct = new Map<string, ProductStock[]>();
       (stocks || []).forEach(st => {
-        const list = stocksByProduct.get(st.product_id) || [];
-        list.push(st);
-        stocksByProduct.set(st.product_id, list);
+        if (!st) return;
+        const rawPId = String(st.product_id || '').trim();
+        if (!rawPId) return;
+        const key = rawPId.toLowerCase();
+        const list = stocksByProduct.get(key) || [];
+        list.push({
+          ...st,
+          quantity: Number(st.quantity ?? (st as unknown as Record<string, unknown>).stock ?? 0) || 0
+        });
+        stocksByProduct.set(key, list);
       });
 
       return (products || []).map(p => {
-        const prodStocks = stocksByProduct.get(p.id) || [];
+        const pKey = String(p.id || '').trim().toLowerCase();
+        const prodStocks = stocksByProduct.get(pKey) || [];
         let stock = 0;
         let branchId: string | undefined = undefined;
 
@@ -577,17 +585,20 @@ export const dbService = {
           );
 
           const match = prodStocks.find(s => {
-            if (s.branch_id === selectedBranchId || s.branch_id.toLowerCase() === selectedBranchId.toLowerCase()) return true;
+            if (!s.branch_id) return false;
+            const sBranch = s.branch_id.trim().toLowerCase();
+            const selBranch = selectedBranchId.trim().toLowerCase();
+            if (sBranch === selBranch) return true;
             if (targetBranch) {
-              return s.branch_id.toLowerCase() === targetBranch.id.toLowerCase() ||
-                     s.branch_id.toLowerCase() === targetBranch.code.toLowerCase() ||
-                     s.branch_id.toLowerCase() === targetBranch.name.toLowerCase();
+              return sBranch === targetBranch.id.toLowerCase() ||
+                     sBranch === targetBranch.code.toLowerCase() ||
+                     sBranch === targetBranch.name.toLowerCase();
             }
             return false;
           });
 
           if (match) {
-            stock = Number(match.quantity ?? (match as unknown as Record<string, unknown>).stock ?? 0) || 0;
+            stock = Number(match.quantity) || 0;
           } else if (prodStocks.length === 0) {
             stock = Number(p.stock) || 0;
           } else {
@@ -597,7 +608,7 @@ export const dbService = {
         } else {
           // Cross-branch total stock: SUM(quantity) from product_stock
           if (prodStocks.length > 0) {
-            stock = prodStocks.reduce((sum, s) => sum + (Number(s.quantity ?? (s as unknown as Record<string, unknown>).stock ?? 0) || 0), 0);
+            stock = prodStocks.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
           } else {
             stock = Number(p.stock) || 0;
           }

@@ -388,11 +388,14 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
       let branchStock = 0;
       if (p.stocks && p.stocks.length > 0) {
         const match = p.stocks.find(s => {
-          if (s.branch_id === selectedBranchId || s.branch_id.toLowerCase() === selectedBranchId.toLowerCase()) return true;
+          if (!s.branch_id) return false;
+          const sBranch = s.branch_id.trim().toLowerCase();
+          const selBranch = selectedBranchId.trim().toLowerCase();
+          if (sBranch === selBranch) return true;
           if (targetBranch) {
-            return s.branch_id.toLowerCase() === targetBranch.id.toLowerCase() ||
-                   s.branch_id.toLowerCase() === targetBranch.code.toLowerCase() ||
-                   s.branch_id.toLowerCase() === targetBranch.name.toLowerCase();
+            return sBranch === targetBranch.id.toLowerCase() ||
+                   sBranch === targetBranch.code.toLowerCase() ||
+                   sBranch === targetBranch.name.toLowerCase();
           }
           return false;
         });

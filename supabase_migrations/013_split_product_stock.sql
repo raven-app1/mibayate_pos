@@ -145,16 +145,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS products_sku_unique_idx
   WHERE sku IS NOT NULL AND sku <> '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS products_barcode_unique_idx
-  ON public.products (barcode)
-  WHERE barcode IS NOT NULL AND barcode <> '';
-
 -- ── 5. Recreate clean RLS Policies for products & product_stock ──
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read products" ON public.products;
 CREATE POLICY "Authenticated users can read products"
   ON public.products FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (true);
 
+DROP POLICY IF EXISTS "Authorized users can insert products" ON public.products;
 CREATE POLICY "Authorized users can insert products"
   ON public.products FOR INSERT
   WITH CHECK (
@@ -162,10 +161,12 @@ CREATE POLICY "Authorized users can insert products"
     AND public.current_user_is_manager_or_owner()
   );
 
+DROP POLICY IF EXISTS "Authenticated users can update products" ON public.products;
 CREATE POLICY "Authenticated users can update products"
   ON public.products FOR UPDATE
   USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Authorized users can delete products" ON public.products;
 CREATE POLICY "Authorized users can delete products"
   ON public.products FOR DELETE
   USING (
@@ -178,9 +179,7 @@ ALTER TABLE public.product_stock ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated users can read product_stock" ON public.product_stock;
 CREATE POLICY "Authenticated users can read product_stock"
   ON public.product_stock FOR SELECT
-  USING (auth.role() = 'authenticated');
-
-DROP POLICY IF EXISTS "Authorized users can insert product_stock" ON public.product_stock;
+  USING (true);
 CREATE POLICY "Authorized users can insert product_stock"
   ON public.product_stock FOR INSERT
   WITH CHECK (

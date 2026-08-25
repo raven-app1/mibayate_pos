@@ -273,7 +273,7 @@ ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can read products"
   ON public.products FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (true);
 
 CREATE POLICY "Authorized users can insert products"
   ON public.products FOR INSERT
@@ -310,7 +310,7 @@ ALTER TABLE public.product_stock ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can read product_stock"
   ON public.product_stock FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (true);
 
 CREATE POLICY "Authorized users can insert product_stock"
   ON public.product_stock FOR INSERT
