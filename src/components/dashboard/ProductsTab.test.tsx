@@ -118,4 +118,59 @@ describe('ProductsTab sorting behavior', () => {
       'Zebra Toy (Sold Out)'
     ]);
   });
+
+  it('renders delete buttons when logged in as owner', () => {
+    const mockDelete = vi.fn();
+    render(
+      <ProductsTab
+        user={mockUser}
+        branches={[]}
+        selectedBranchId="all"
+        setSelectedBranchId={vi.fn()}
+        displayProducts={mockProducts}
+        categories={['Fruits', 'Toys', 'Services']}
+        setShowCsvModal={vi.fn()}
+        handleExportCsv={vi.fn()}
+        openBarcodeModal={vi.fn()}
+        startEditProduct={vi.fn()}
+        openQuickRestock={vi.fn()}
+        triggerDeleteProduct={mockDelete}
+      />
+    );
+
+    const deleteButtons = screen.getAllByTitle('Delete Product');
+    expect(deleteButtons.length).toBeGreaterThan(0);
+  });
+
+  it('does not render delete buttons when logged in as manager', () => {
+    const mockManager: UserProfile = {
+      id: 'manager-1',
+      name: 'Store Manager',
+      email: 'manager@pos.com',
+      role: 'manager',
+      branch_id: 'branch-1',
+      created_at: new Date().toISOString()
+    };
+
+    render(
+      <ProductsTab
+        user={mockManager}
+        branches={[]}
+        selectedBranchId="branch-1"
+        setSelectedBranchId={vi.fn()}
+        displayProducts={mockProducts}
+        categories={['Fruits', 'Toys', 'Services']}
+        setShowCsvModal={vi.fn()}
+        handleExportCsv={vi.fn()}
+        openBarcodeModal={vi.fn()}
+        startEditProduct={vi.fn()}
+        openQuickRestock={vi.fn()}
+        triggerDeleteProduct={vi.fn()}
+      />
+    );
+
+    const deleteButtons = screen.queryAllByTitle('Delete Product');
+    expect(deleteButtons.length).toBe(0);
+    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+  });
 });

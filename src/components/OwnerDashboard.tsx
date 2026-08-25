@@ -534,6 +534,10 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
   };
 
   const triggerDeleteProduct = (id: string, name: string) => {
+    if (user.role !== 'owner') {
+      toast('Only the store owner can delete products.', 'error');
+      return;
+    }
     setDeleteConfirm({
       id,
       type: 'product',
@@ -573,6 +577,9 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
       } else if (deleteConfirm.type === 'cashier') {
         await dbService.auth.deleteCashier(deleteConfirm.id);
       } else if (deleteConfirm.type === 'product') {
+        if (user.role !== 'owner') {
+          throw new Error('Only the store owner can delete products.');
+        }
         await dbService.products.delete(deleteConfirm.id);
       } else if (deleteConfirm.type === 'cash-flow') {
         await dbService.cashFlow.delete(deleteConfirm.id);

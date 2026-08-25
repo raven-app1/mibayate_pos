@@ -42,6 +42,7 @@ export default function ProductsTab({
   const [productPage, setProductPage] = useState(1);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const isOwner = user.role === 'owner';
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -386,7 +387,7 @@ export default function ProductsTab({
                       </div>
                     </div>
 
-                    <div className={`grid grid-cols-2 gap-2 overflow-hidden transition-all duration-300 ease-in-out ${expandedProductId === prod.id ? 'max-h-40 opacity-100 mt-3 pt-3 border-t border-slate-100' : 'max-h-0 opacity-0 mt-0 pt-0 border-transparent'}`}>
+                    <div className={`grid ${isOwner ? 'grid-cols-2' : 'grid-cols-3'} gap-2 overflow-hidden transition-all duration-300 ease-in-out ${expandedProductId === prod.id ? 'max-h-40 opacity-100 mt-3 pt-3 border-t border-slate-100' : 'max-h-0 opacity-0 mt-0 pt-0 border-transparent'}`}>
                       <button
                         onClick={(e) => { e.stopPropagation(); openBarcodeModal(prod); }}
                         className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-[10px] font-bold w-full"
@@ -409,13 +410,15 @@ export default function ProductsTab({
                         <PackagePlus className="w-3.5 h-3.5" />
                         <span>Restock</span>
                       </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); triggerDeleteProduct(prod.id, prod.name); }}
-                        className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-[10px] font-bold w-full"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); triggerDeleteProduct(prod.id, prod.name); }}
+                          className="p-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-[10px] font-bold w-full"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -564,13 +567,15 @@ export default function ProductsTab({
                             >
                               <PackagePlus className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={() => triggerDeleteProduct(prod.id, prod.name)}
-                              className="p-1.5 hover:bg-red-50 text-red-600 hover:text-red-800 rounded transition-colors cursor-pointer"
-                              title="Delete Product"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isOwner && (
+                              <button
+                                onClick={() => triggerDeleteProduct(prod.id, prod.name)}
+                                className="p-1.5 hover:bg-red-50 text-red-600 hover:text-red-800 rounded transition-colors cursor-pointer"
+                                title="Delete Product"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

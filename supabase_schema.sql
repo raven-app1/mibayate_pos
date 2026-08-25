@@ -292,7 +292,7 @@ CREATE POLICY "Authorized users can delete products"
   ON public.products FOR DELETE
   USING (
     auth.role() = 'authenticated'
-    AND public.current_user_is_manager_or_owner()
+    AND public.current_user_is_owner()
   );
 
 -- ── 3b. Product Stock ─────────────────────────────────────────
@@ -332,7 +332,7 @@ CREATE POLICY "Authorized users can delete product_stock"
   ON public.product_stock FOR DELETE
   USING (
     auth.role() = 'authenticated'
-    AND public.current_user_can_manage_product(branch_id)
+    AND public.current_user_is_owner()
   );
 -- ── 4. Sales ─────────────────────────────────────────────────
 CREATE TABLE public.sales (
