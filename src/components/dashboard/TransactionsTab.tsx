@@ -43,11 +43,14 @@ export default function TransactionsTab({
   }, [transactions, selectedBranchId]);
 
   const filteredTxs = useMemo(() => {
+    const q = (txSearch || '').trim().toLowerCase();
     return displayTxs.filter(tx => {
-      const matchesSearch = tx.product_name.toLowerCase().includes(txSearch.toLowerCase()) ||
-             tx.performed_by.toLowerCase().includes(txSearch.toLowerCase()) ||
-             tx.notes.toLowerCase().includes(txSearch.toLowerCase()) ||
-             tx.type.toLowerCase().includes(txSearch.toLowerCase());
+      if (!tx) return false;
+      const matchesSearch = !q ||
+             (tx.product_name || '').toLowerCase().includes(q) ||
+             (tx.performed_by || '').toLowerCase().includes(q) ||
+             (tx.notes || '').toLowerCase().includes(q) ||
+             (tx.type || '').toLowerCase().includes(q);
       const matchesType = txTypeFilter === 'all' || tx.type === txTypeFilter;
       return matchesSearch && matchesType;
     });

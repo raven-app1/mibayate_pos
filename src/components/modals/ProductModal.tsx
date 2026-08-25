@@ -267,7 +267,7 @@ export default function ProductModal({
                   />
                   {isProductNameFocused && formValues.name.length >= 2 && (
                     (() => {
-                      const matchingProducts = products.filter(p => p.name.toLowerCase().includes(formValues.name.toLowerCase()) && p.id !== editingProduct?.id).slice(0, 5);
+                      const matchingProducts = products.filter(p => (p.name || '').toLowerCase().includes(formValues.name.toLowerCase()) && p.id !== editingProduct?.id).slice(0, 5);
                       if (matchingProducts.length > 0) {
                         return (
                           <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">

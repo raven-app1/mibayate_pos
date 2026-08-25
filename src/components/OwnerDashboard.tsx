@@ -348,10 +348,11 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
   // Auto-align manager's selectedBranchId to canonical branch ID when branches load
   useEffect(() => {
     if (user.role === 'manager' && user.branch_id && branches.length > 0) {
+      const uBranch = user.branch_id.trim().toLowerCase();
       const canonical = branches.find(b => 
-        b.id.toLowerCase() === user.branch_id?.toLowerCase() ||
-        b.code.toLowerCase() === user.branch_id?.toLowerCase() ||
-        b.name.toLowerCase() === user.branch_id?.toLowerCase()
+        (b.id && b.id.toLowerCase() === uBranch) ||
+        (b.code && b.code.toLowerCase() === uBranch) ||
+        (b.name && b.name.toLowerCase() === uBranch)
       );
       if (canonical && selectedBranchId !== canonical.id) {
         setSelectedBranchId(canonical.id);
@@ -380,9 +381,9 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     }
 
     const targetBranch = branches.find(b => 
-      b.id.toLowerCase() === selectedBranchId.toLowerCase() ||
-      b.code.toLowerCase() === selectedBranchId.toLowerCase() ||
-      b.name.toLowerCase() === selectedBranchId.toLowerCase()
+      (b.id && b.id.toLowerCase() === selectedBranchId.toLowerCase()) ||
+      (b.code && b.code.toLowerCase() === selectedBranchId.toLowerCase()) ||
+      (b.name && b.name.toLowerCase() === selectedBranchId.toLowerCase())
     );
     const branchName = targetBranch?.name;
     const branchId = targetBranch?.id || selectedBranchId;
@@ -391,14 +392,14 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
       let branchStock = 0;
       if (p.stocks && p.stocks.length > 0) {
         const match = p.stocks.find(s => {
-          if (!s.branch_id) return false;
+          if (!s || !s.branch_id) return false;
           const sBranch = s.branch_id.trim().toLowerCase();
           const selBranch = selectedBranchId.trim().toLowerCase();
           if (sBranch === selBranch) return true;
           if (targetBranch) {
-            return sBranch === targetBranch.id.toLowerCase() ||
-                   sBranch === targetBranch.code.toLowerCase() ||
-                   sBranch === targetBranch.name.toLowerCase();
+            return (Boolean(targetBranch.id) && sBranch === targetBranch.id.toLowerCase()) ||
+                   (Boolean(targetBranch.code) && sBranch === targetBranch.code.toLowerCase()) ||
+                   (Boolean(targetBranch.name) && sBranch === targetBranch.name.toLowerCase());
           }
           return false;
         });

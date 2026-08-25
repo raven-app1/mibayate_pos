@@ -473,11 +473,13 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProducts = products.filter(p => {
+    if (!p) return false;
+    const q = (searchTerm || '').toLowerCase();
+    return (p.name || '').toLowerCase().includes(q) ||
+           (p.sku || '').toLowerCase().includes(q) ||
+           (p.barcode || '').toLowerCase().includes(q);
+  });
 
   const toggleSelectProduct = (id: string) => {
     setSelectedProducts(prev => {

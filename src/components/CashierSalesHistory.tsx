@@ -184,11 +184,11 @@ export default function CashierSalesHistory({
 
     const filtered = sales.filter((sale) => {
       if (query) {
-        const idMatch = sale.id.toLowerCase().includes(query);
+        const idMatch = (sale.id || '').toLowerCase().includes(query);
         const customerNameMatch = (sale.customer_name || '').toLowerCase().includes(query);
         const customerPhoneMatch = (sale.customer_phone || '').toLowerCase().includes(query);
         const itemMatch = sale.items?.some((it) =>
-          it.product_name.toLowerCase().includes(query)
+          (it.product_name || '').toLowerCase().includes(query)
         );
         if (!idMatch && !customerNameMatch && !customerPhoneMatch && !itemMatch) {
           return false;

@@ -63,18 +63,27 @@ export default function ProductsTab({
   };
 
   const filteredProducts = useMemo(() => {
+    const query = (productSearch || '').trim().toLowerCase();
     const list = displayProducts.filter(p => {
-      const matchesSearch = !productSearch.trim() ||
-                            p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-                            p.sku.toLowerCase().includes(productSearch.toLowerCase()) ||
-                            (p.barcode && p.barcode.toLowerCase().includes(productSearch.toLowerCase()));
-      const matchesCategory = categoryFilter === 'All' || p.category === categoryFilter;
+      if (!p) return false;
+      const name = (p.name || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const barcode = (p.barcode || '').toLowerCase();
+      const category = p.category || '';
+
+      const matchesSearch = !query ||
+                            name.includes(query) || 
+                            sku.includes(query) ||
+                            barcode.includes(query);
+      const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
       
       let matchesStock = true;
+      const pStock = Number(p.stock) || 0;
+      const pMinStock = Number(p.min_stock_level) || 0;
       if (stockFilter === 'Low Stock') {
-        matchesStock = p.stock <= p.min_stock_level && p.stock > 0;
+        matchesStock = pStock <= pMinStock && pStock > 0;
       } else if (stockFilter === 'Out of Stock') {
-        matchesStock = p.stock === 0;
+        matchesStock = pStock <= 0;
       }
 
       return matchesSearch && matchesCategory && matchesStock;
@@ -84,7 +93,7 @@ export default function ProductsTab({
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
       if (timeA !== timeB) return timeB - timeA;
-      return a.name.localeCompare(b.name);
+      return (a.name || '').localeCompare(b.name || '');
     });
   }, [displayProducts, productSearch, categoryFilter, stockFilter]);
 
@@ -167,7 +176,9 @@ export default function ProductsTab({
             🏢 All Outlets (Total Stock)
           </button>
           {branches.map(b => {
-            const isSelected = selectedBranchId === b.id || selectedBranchId?.toLowerCase() === b.code.toLowerCase() || selectedBranchId?.toLowerCase() === b.name.toLowerCase();
+            const isSelected = selectedBranchId === b.id || 
+              (Boolean(selectedBranchId) && Boolean(b.code) && selectedBranchId.toLowerCase() === b.code.toLowerCase()) || 
+              (Boolean(selectedBranchId) && Boolean(b.name) && selectedBranchId.toLowerCase() === b.name.toLowerCase());
             return (
               <button
                 key={b.id}

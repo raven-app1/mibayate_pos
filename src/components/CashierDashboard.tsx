@@ -235,15 +235,15 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       if (!user.branch_id) return p;
       let branchStock = 0;
       if (p.stocks && p.stocks.length > 0) {
-        const uBranchId = user.branch_id.trim().toLowerCase();
+        const uBranchId = user.branch_id ? user.branch_id.trim().toLowerCase() : '';
         const uBranchName = user.branch_name ? user.branch_name.trim().toLowerCase() : '';
         const match = p.stocks.find(s => {
-          if (!s.branch_id) return false;
+          if (!s || !s.branch_id) return false;
           const sBranch = s.branch_id.trim().toLowerCase();
-          return sBranch === uBranchId || (uBranchName && sBranch === uBranchName);
+          return (Boolean(uBranchId) && sBranch === uBranchId) || (Boolean(uBranchName) && sBranch === uBranchName);
         });
         branchStock = match ? (Number(match.quantity) || 0) : 0;
-      } else if (p.branch_id && p.branch_id.trim().toLowerCase() !== user.branch_id.trim().toLowerCase()) {
+      } else if (p.branch_id && user.branch_id && p.branch_id.trim().toLowerCase() !== user.branch_id.trim().toLowerCase()) {
         branchStock = 0;
       } else {
         branchStock = Number(p.stock) || 0;
@@ -349,6 +349,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     const query = searchQuery.trim().toLowerCase();
 
     return branchProducts.filter(p => {
+      if (!p) return false;
       const isOutOfStock = p.use_stock !== false && (Number(p.stock) || 0) <= 0;
 
       // When not searching (default view or category browsing), hide sold-out items
@@ -356,10 +357,14 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
         return false;
       }
 
+      const name = (p.name || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const barcode = (p.barcode || '').toLowerCase();
+
       const matchesSearch = !isSearching || (
-        (p.name && p.name.toLowerCase().includes(query)) ||
-        (p.sku && p.sku.toLowerCase().includes(query)) ||
-        (p.barcode && p.barcode.toLowerCase().includes(query))
+        name.includes(query) ||
+        sku.includes(query) ||
+        barcode.includes(query)
       );
 
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;

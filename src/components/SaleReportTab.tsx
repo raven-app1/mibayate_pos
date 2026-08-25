@@ -99,9 +99,9 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
     }
 
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       result = result.filter(s => 
-        s.id.toLowerCase().includes(q) || 
+        (s.id || '').toLowerCase().includes(q) || 
         (s.customer_name || '').toLowerCase().includes(q) ||
         (s.cashier_name || '').toLowerCase().includes(q) ||
         (s.branch_name || '').toLowerCase().includes(q)
