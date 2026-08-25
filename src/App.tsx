@@ -15,7 +15,7 @@ import CashierDashboard from './components/CashierDashboard';
 import PullToRefresh from './components/PullToRefresh';
 import ServerMaintenance from './components/ServerMaintenance';
 
-export const MAINTENANCE_MODE = true;
+export const MAINTENANCE_MODE = false;
 function ExitPrompt() {
   const { toast } = useToast();
 
