@@ -351,14 +351,25 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
 
   const displayProducts = useMemo(() => {
     if (selectedBranchId === 'all') {
-      return products.map(p => ({
-        ...p,
-        stock: p.stocks ? p.stocks.reduce((sum, s) => sum + (s.quantity || 0), 0) : (p.stock || 0)
-      }));
+      return products.map(p => {
+        const total = p.stocks && p.stocks.length > 0
+          ? p.stocks.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0)
+          : (Number(p.stock) || 0);
+        return {
+          ...p,
+          stock: total
+        };
+      });
     }
     const branchName = branches.find(b => b.id === selectedBranchId)?.name;
     return products.map(p => {
-      const branchStock = p.stocks?.find(s => s.branch_id === selectedBranchId)?.quantity ?? 0;
+      let branchStock = 0;
+      if (p.stocks && p.stocks.length > 0) {
+        const match = p.stocks.find(s => s.branch_id === selectedBranchId);
+        branchStock = match ? (Number(match.quantity) || 0) : 0;
+      } else {
+        branchStock = Number(p.stock) || 0;
+      }
       return {
         ...p,
         stock: branchStock,

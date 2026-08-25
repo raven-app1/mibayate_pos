@@ -562,11 +562,21 @@ export const dbService = {
 
         if (selectedBranchId && selectedBranchId !== 'all') {
           const match = prodStocks.find(s => s.branch_id === selectedBranchId);
-          stock = match ? match.quantity : 0;
+          if (match) {
+            stock = Number(match.quantity ?? (match as unknown as Record<string, unknown>).stock ?? 0) || 0;
+          } else if (prodStocks.length === 0) {
+            stock = Number(p.stock) || 0;
+          } else {
+            stock = 0;
+          }
           branchId = selectedBranchId;
         } else {
           // Cross-branch total stock: SUM(quantity) from product_stock
-          stock = prodStocks.reduce((sum, s) => sum + (s.quantity || 0), 0);
+          if (prodStocks.length > 0) {
+            stock = prodStocks.reduce((sum, s) => sum + (Number(s.quantity ?? (s as unknown as Record<string, unknown>).stock ?? 0) || 0), 0);
+          } else {
+            stock = Number(p.stock) || 0;
+          }
         }
 
         return {
@@ -700,15 +710,20 @@ export const dbService = {
         }
         throw prodErr;
       }
-
-      // Insert one row per branch into product_stock (quantity 0 except the branch it was added from)
-      const stockRows: ProductStock[] = branchesList.map(branch => ({
-        id: `pstock-${productId}-${branch.id}`,
-        product_id: productId,
-        branch_id: branch.id,
-        quantity: branch.id === targetBranchId ? initialStockQty : 0,
-        updated_at: now
-      }));
+      // Insert one row per branch into product_stock
+      const stockRows: ProductStock[] = branchesList.map(branch => {
+        const customStock = prod.stocks?.find(s => s.branch_id === branch.id);
+        const qty = customStock !== undefined
+          ? Math.max(0, Number(customStock.quantity) || 0)
+          : (branch.id === targetBranchId ? initialStockQty : 0);
+        return {
+          id: `pstock-${productId}-${branch.id}`,
+          product_id: productId,
+          branch_id: branch.id,
+          quantity: qty,
+          updated_at: now
+        };
+      });
 
       const { error: stockErr } = await supabase
         .from('product_stock')
@@ -718,31 +733,35 @@ export const dbService = {
         console.warn('product_stock insert error on product create:', stockErr);
       }
 
-      if (initialStockQty > 0 && prod.use_stock !== false) {
-        try {
-          await supabase.from('inventory_transactions').insert({
-            id: generateId(),
-            product_id: productId,
-            product_name: catalogProduct.name,
-            branch_id: targetBranchId,
-            branch_name: targetBranchName || DEFAULT_BRANCH_NAME,
-            type: 'stock-in',
-            quantity: initialStockQty,
-            notes: 'Initial stock load on product creation',
-            performed_by: performedBy,
-            created_at: now
-          });
-        } catch (txErr) {
-          console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+      for (const st of stockRows) {
+        if (st.quantity > 0 && prod.use_stock !== false) {
+          try {
+            const bName = branchesList.find(b => b.id === st.branch_id)?.name || DEFAULT_BRANCH_NAME;
+            await supabase.from('inventory_transactions').insert({
+              id: generateId(),
+              product_id: productId,
+              product_name: catalogProduct.name,
+              branch_id: st.branch_id,
+              branch_name: bName,
+              type: 'stock-in',
+              quantity: st.quantity,
+              notes: 'Initial stock load on product creation',
+              performed_by: performedBy,
+              created_at: now
+            });
+          } catch (txErr) {
+            console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+          }
         }
       }
 
       notifyDataChanged('products');
       notifyDataChanged('product_stock');
 
+      const totalComputedStock = stockRows.reduce((sum, s) => sum + s.quantity, 0);
       return {
         ...insertedProduct,
-        stock: initialStockQty,
+        stock: targetBranchId ? (stockRows.find(s => s.branch_id === targetBranchId)?.quantity ?? totalComputedStock) : totalComputedStock,
         branch_id: targetBranchId,
         branch_name: targetBranchName || undefined,
         stocks: stockRows
@@ -805,15 +824,52 @@ export const dbService = {
           throw error;
         }
       }
+      const now = new Date().toISOString();
 
-      if (updateStock !== undefined) {
-        const targetBranchId = updateBranchId || (currentStocks && currentStocks[0]?.branch_id) || DEFAULT_BRANCH_ID;
+      if (Array.isArray(updateStocks) && updateStocks.length > 0) {
+        for (const st of updateStocks as ProductStock[]) {
+          const bId = st.branch_id;
+          const newQty = Math.max(0, Number(st.quantity) || 0);
+          const currentBranchStock = (currentStocks || []).find(s => s.branch_id === bId);
+          const oldQty = currentBranchStock ? Number(currentBranchStock.quantity) || 0 : 0;
+
+          await supabase
+            .from('product_stock')
+            .upsert({
+              id: currentBranchStock?.id || `pstock-${id}-${bId}`,
+              product_id: id,
+              branch_id: bId,
+              quantity: newQty,
+              updated_at: now
+            }, { onConflict: 'product_id,branch_id' });
+
+          if (newQty !== oldQty) {
+            const diff = newQty - oldQty;
+            try {
+              await supabase.from('inventory_transactions').insert({
+                id: generateId(),
+                product_id: id,
+                product_name: (catalogUpdates.name as string) || current.name,
+                branch_id: bId,
+                branch_name: (typeof updateBranchName === 'string' && updateBranchName) || DEFAULT_BRANCH_NAME,
+                type: diff > 0 ? 'stock-in' : 'stock-out',
+                quantity: Math.abs(diff),
+                notes: `Stock adjusted manually. Old: ${oldQty}, New: ${newQty}`,
+                performed_by: performedBy,
+                created_at: now
+              });
+            } catch (txErr) {
+              console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+            }
+          }
+        }
+      } else if (updateStock !== undefined) {
+        const targetBranchId = (typeof updateBranchId === 'string' && updateBranchId) || (currentStocks && currentStocks[0]?.branch_id) || DEFAULT_BRANCH_ID;
         const currentBranchStock = (currentStocks || []).find(s => s.branch_id === targetBranchId);
-        const oldQty = currentBranchStock ? currentBranchStock.quantity : 0;
+        const oldQty = currentBranchStock ? Number(currentBranchStock.quantity) || 0 : 0;
         const newQty = Math.max(0, Number(updateStock) || 0);
 
-        if (newQty !== oldQty) {
-          const now = new Date().toISOString();
+        if (newQty !== oldQty || !currentBranchStock) {
           await supabase
             .from('product_stock')
             .upsert({
@@ -825,21 +881,23 @@ export const dbService = {
             }, { onConflict: 'product_id,branch_id' });
 
           const diff = newQty - oldQty;
-          try {
-            await supabase.from('inventory_transactions').insert({
-              id: generateId(),
-              product_id: id,
-              product_name: catalogUpdates.name || current.name,
-              branch_id: targetBranchId,
-              branch_name: updateBranchName || DEFAULT_BRANCH_NAME,
-              type: diff > 0 ? 'stock-in' : 'stock-out',
-              quantity: Math.abs(diff),
-              notes: `Stock adjusted manually. Old stock: ${oldQty}, New stock: ${newQty}`,
-              performed_by: performedBy,
-              created_at: now
-            });
-          } catch (txErr) {
-            console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+          if (diff !== 0) {
+            try {
+              await supabase.from('inventory_transactions').insert({
+                id: generateId(),
+                product_id: id,
+                product_name: (catalogUpdates.name as string) || current.name,
+                branch_id: targetBranchId,
+                branch_name: (typeof updateBranchName === 'string' && updateBranchName) || DEFAULT_BRANCH_NAME,
+                type: diff > 0 ? 'stock-in' : 'stock-out',
+                quantity: Math.abs(diff),
+                notes: `Stock adjusted manually. Old stock: ${oldQty}, New stock: ${newQty}`,
+                performed_by: performedBy,
+                created_at: now
+              });
+            } catch (txErr) {
+              console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+            }
           }
         }
       }

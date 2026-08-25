@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Package, AlertTriangle, CheckCircle, Tag, RefreshCw, DollarSign, Layers } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Product, Branch, UserProfile } from '../../types';
+import { Package, AlertTriangle, CheckCircle, Tag, RefreshCw, DollarSign, Layers, X } from 'lucide-react';
+import { UserProfile, Branch, Product, ProductStock } from '../../types';
 import { dbService } from '../../lib/supabase';
 import { useToast } from '../../utils/toast';
 import SearchableCategorySelect from '../SearchableCategorySelect';
@@ -54,6 +54,29 @@ export default function ProductModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingCodes, setIsGeneratingCodes] = useState(false);
   const [isProductNameFocused, setIsProductNameFocused] = useState(false);
+  const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    branches.forEach(b => {
+      const match = editingProduct?.stocks?.find(s => s.branch_id === b.id);
+      if (match) {
+        initial[b.id] = Number(match.quantity) || 0;
+      } else if (editingProduct?.branch_id === b.id) {
+        initial[b.id] = Number(editingProduct.stock) || 0;
+      } else {
+        initial[b.id] = 0;
+      }
+    });
+    const totalAssigned = Object.values(initial).reduce((sum: number, v: number) => sum + v, 0);
+    if (totalAssigned === 0 && editingProduct?.stock && branches[0]) {
+      const targetId = editingProduct.branch_id || branches[0].id;
+      initial[targetId] = Number(editingProduct.stock) || 0;
+    }
+    return initial;
+  });
+
+  const computedTotalStock = useMemo(() => {
+    return Object.values(branchStockMap).reduce((sum: number, v: number) => sum + (Number(v) || 0), 0);
+  }, [branchStockMap]);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
@@ -69,7 +92,7 @@ export default function ProductModal({
       unit_amount: editingProduct?.unit_amount ?? 1,
       unit_name: editingProduct?.unit_name || 'pcs',
       use_stock: editingProduct?.use_stock !== false,
-      stock: editingProduct?.stock ?? 0,
+      stock: editingProduct?.stock ?? computedTotalStock,
       min_stock_level: editingProduct?.min_stock_level ?? 5,
       expiry_date: editingProduct?.expiry_date || '',
       branch_id: editingProduct?.branch_id || (user.role === 'manager' && user.branch_id ? user.branch_id : '')
@@ -77,6 +100,10 @@ export default function ProductModal({
   });
 
   const formValues = watch();
+
+  useEffect(() => {
+    setValue('stock', computedTotalStock);
+  }, [computedTotalStock, setValue]);
 
   useEffect(() => {
     const errorKeys = Object.keys(errors);
@@ -93,15 +120,6 @@ export default function ProductModal({
       void fillGeneratedCodes();
     }
   }, [editingProduct]);
-
-  useEffect(() => {
-    if (editingProduct && editingProduct.stocks && formValues.branch_id) {
-      const match = editingProduct.stocks.find(s => s.branch_id === formValues.branch_id);
-      if (match) {
-        setValue('stock', match.quantity);
-      }
-    }
-  }, [formValues.branch_id, editingProduct, setValue]);
   const fillGeneratedCodes = async () => {
     setIsGeneratingCodes(true);
     try {
@@ -126,6 +144,13 @@ export default function ProductModal({
         : (data.branch_id || null);
       const selectedBranch = branches.find(b => b.id === targetBranchId);
       
+      const stocksList: ProductStock[] = branches.map(b => ({
+        id: `pstock-${editingProduct?.id || 'new'}-${b.id}`,
+        product_id: editingProduct?.id || '',
+        branch_id: b.id,
+        quantity: Math.max(0, Number(branchStockMap[b.id]) || 0)
+      }));
+
       const payload = {
         name: data.name.trim(),
         sku: (data.sku || '').trim().toUpperCase(),
@@ -137,14 +162,14 @@ export default function ProductModal({
         cost: Number(data.cost) || 0,
         unit_amount: Number(data.unit_amount) || 1,
         unit_name: (data.unit_name || 'pcs').trim(),
-        stock: Number(data.stock) || 0,
+        stock: computedTotalStock,
+        stocks: stocksList,
         min_stock_level: Number(data.min_stock_level) || 5,
         price_variant: (data.price_variant || 'Standard').trim(),
         expiry_date: data.expiry_date || null,
         branch_id: targetBranchId,
         branch_name: selectedBranch ? selectedBranch.name : null
       };
-
       let savedProduct: Product;
       if (editingProduct) {
         savedProduct = await dbService.products.update(editingProduct.id, payload, user.name);
@@ -416,19 +441,59 @@ export default function ProductModal({
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Current Stock Count *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    readOnly={!formValues.use_stock}
-                    {...register('stock', { valueAsNumber: true })}
-                    placeholder="0"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-gray-900 read-only:opacity-50 font-bold"
-                  />
+              {/* Branch stock distribution */}
+              {branches.length > 0 && formValues.use_stock ? (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      Branch Stock Inventory Levels
+                    </label>
+                    <span className="text-[11px] font-bold text-gray-900 font-mono">
+                      Total Stock: {computedTotalStock} {formValues.unit_name || 'pcs'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+                    {branches.map(b => (
+                      <div key={b.id} className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-bold text-slate-900 truncate">📍 {b.name}</p>
+                          <p className="text-[9px] text-slate-400 font-mono">{b.code}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 w-28">
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={user.role === 'manager' && user.branch_id !== b.id}
+                            value={branchStockMap[b.id] ?? 0}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                              setBranchStockMap(prev => ({ ...prev, [b.id]: val }));
+                            }}
+                            className="w-full p-1.5 bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-md text-right font-mono font-bold text-xs focus:outline-none focus:border-gray-900"
+                          />
+                          <span className="text-[9px] text-slate-400 font-bold">{formValues.unit_name || 'pcs'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Current Stock Count *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      readOnly={!formValues.use_stock}
+                      {...register('stock', { valueAsNumber: true })}
+                      placeholder="0"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-gray-900 read-only:opacity-50 font-bold"
+                    />
+                  </div>
+                </div>
+              )}
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Min Alert Stock Level</label>
                   <input
@@ -448,7 +513,7 @@ export default function ProductModal({
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-gray-900 font-medium"
                   />
                 </div>
-
+              </div>
                 <div className="sm:col-span-3">
                   <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                     Branch Outlet Assignment {user.role === 'manager' && <span className="text-slate-400 font-normal lowercase">(assigned branch)</span>}
@@ -470,7 +535,6 @@ export default function ProductModal({
                 </div>
               </div>
             </div>
-          </div>
 
           {/* PINNED MODAL FOOTER */}
           <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-3 shrink-0">

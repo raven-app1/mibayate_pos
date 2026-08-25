@@ -228,7 +228,13 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const branchProducts = useMemo(() => {
     return products.map(p => {
       if (!user.branch_id) return p;
-      const branchStock = p.stocks?.find(s => s.branch_id === user.branch_id)?.quantity ?? p.stock ?? 0;
+      let branchStock = 0;
+      if (p.stocks && p.stocks.length > 0) {
+        const match = p.stocks.find(s => s.branch_id === user.branch_id);
+        branchStock = match ? (Number(match.quantity) || 0) : 0;
+      } else {
+        branchStock = Number(p.stock) || 0;
+      }
       return {
         ...p,
         stock: branchStock,
