@@ -35,6 +35,20 @@ vi.mock('../lib/supabase', () => ({
 vi.mock('../lib/realtimeSync', () => ({
   subscribeToDataChanges: vi.fn(() => vi.fn())
 }));
+vi.mock('./BarcodeScannerModal', () => ({
+  default: ({ isOpen, onScan }: { isOpen: boolean; onScan: (code: string) => void }) => {
+    if (!isOpen) return null;
+    return (
+      <div data-testid="mock-scanner-modal">
+        <input
+          data-testid="scanner-input"
+          onChange={(e) => onScan(e.target.value)}
+        />
+      </div>
+    );
+  }
+}));
+
 
 const mockUser: UserProfile = {
   id: 'cashier-1',
@@ -237,5 +251,245 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
 
     // Verify cart header
     expect(screen.getByText('2 items selected')).toBeInTheDocument();
+  });
+});
+
+describe('CashierDashboard multi-branch product stock isolation', () => {
+  const branch1Cashier: UserProfile = {
+    id: 'cashier-b1',
+    name: 'Downtown Cashier',
+    email: 'b1@pos.com',
+    role: 'cashier',
+    branch_id: 'branch-1',
+    branch_name: 'Downtown',
+    created_at: new Date().toISOString()
+  };
+
+  const branch2Cashier: UserProfile = {
+    id: 'cashier-b2',
+    name: 'Airport Cashier',
+    email: 'b2@pos.com',
+    role: 'cashier',
+    branch_id: 'branch-2',
+    branch_name: 'Airport',
+    created_at: new Date().toISOString()
+  };
+
+  const multiBranchProducts: Product[] = [
+    {
+      id: 'prod-shared-1',
+      name: 'Shared MultiBranch T-Shirt',
+      sku: 'SHIRT-01',
+      barcode: '888001',
+      price: 15000,
+      cost: 8000,
+      stock: 25, // Total across all branches: 5 (b1) + 20 (b2)
+      stocks: [
+        { id: 's-1', product_id: 'prod-shared-1', branch_id: 'branch-1', quantity: 5 },
+        { id: 's-2', product_id: 'prod-shared-1', branch_id: 'branch-2', quantity: 20 }
+      ],
+      category: 'Apparel',
+      use_stock: true,
+      min_stock_level: 2,
+      created_at: ''
+    },
+    {
+      id: 'prod-b2-only',
+      name: 'Airport Exclusive Denim Pants',
+      sku: 'PANTS-01',
+      barcode: '888002',
+      price: 25000,
+      cost: 15000,
+      stock: 30, // In branch 2 only, no stock entry for branch 1
+      stocks: [
+        { id: 's-3', product_id: 'prod-b2-only', branch_id: 'branch-2', quantity: 30 }
+      ],
+      category: 'Apparel',
+      use_stock: true,
+      min_stock_level: 5,
+      created_at: ''
+    },
+    {
+      id: 'prod-b1-zero',
+      name: 'Downtown Running Shoes',
+      sku: 'SHOES-01',
+      barcode: '888003',
+      price: 45000,
+      cost: 30000,
+      stock: 15, // 0 in b1, 15 in b2
+      stocks: [
+        { id: 's-4', product_id: 'prod-b1-zero', branch_id: 'branch-1', quantity: 0 },
+        { id: 's-5', product_id: 'prod-b1-zero', branch_id: 'branch-2', quantity: 15 }
+      ],
+      category: 'Footwear',
+      use_stock: true,
+      min_stock_level: 3,
+      created_at: ''
+    },
+    {
+      id: 'prod-nostock-service',
+      name: 'Shoe Cleaning Service',
+      sku: 'SRV-CLEAN',
+      barcode: '888004',
+      price: 5000,
+      cost: 500,
+      stock: 0,
+      category: 'Services',
+      use_stock: false,
+      min_stock_level: 0,
+      created_at: ''
+    },
+    {
+      id: 'prod-legacy-b2',
+      name: 'Legacy Airport Souvenir',
+      sku: 'SOUV-01',
+      barcode: '888005',
+      price: 8000,
+      cost: 4000,
+      stock: 10,
+      branch_id: 'branch-2', // legacy product tied to branch-2, no stocks array
+      category: 'Souvenirs',
+      use_stock: true,
+      min_stock_level: 2,
+      created_at: ''
+    },
+    {
+      id: 'prod-legacy-b1',
+      name: 'Legacy Downtown Mug',
+      sku: 'MUG-01',
+      barcode: '888006',
+      price: 6000,
+      cost: 2500,
+      stock: 8,
+      branch_id: 'branch-1', // legacy product tied to branch-1, no stocks array
+      category: 'Souvenirs',
+      use_stock: true,
+      min_stock_level: 2,
+      created_at: ''
+    }
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(dbService.products.getAll).mockResolvedValue(multiBranchProducts);
+  });
+
+  it('strictly displays Branch-1 stock and treats items with stock only in Branch-2 as Sold Out', async () => {
+    render(<CashierDashboard user={branch1Cashier} onLogout={vi.fn()} />);
+
+    // In Branch 1, Shared T-Shirt has 5 left
+    await waitFor(() => {
+      expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
+      expect(screen.getByText('5 left')).toBeInTheDocument();
+    });
+
+    // In Branch 1, Airport Exclusive Denim Pants (30 in b2, 0 in b1) and Downtown Running Shoes (0 in b1) are sold out
+    // They should NOT be visible by default (hidden when not searching)
+    expect(screen.queryByText('Airport Exclusive Denim Pants')).not.toBeInTheDocument();
+    expect(screen.queryByText('Downtown Running Shoes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Legacy Airport Souvenir')).not.toBeInTheDocument();
+
+    // Legacy Downtown Mug (branch-1) is visible with 8 left
+    expect(screen.getByText('Legacy Downtown Mug')).toBeInTheDocument();
+    expect(screen.getByText('8 left')).toBeInTheDocument();
+
+    // Unlimited Service is visible
+    expect(screen.getByText('Shoe Cleaning Service')).toBeInTheDocument();
+  });
+
+  it('shows Sold Out badge and disables adding to cart when searching for other branch items', async () => {
+    render(<CashierDashboard user={branch1Cashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search products by name/i);
+    fireEvent.change(searchInput, { target: { value: 'Pants' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Airport Exclusive Denim Pants')).toBeInTheDocument();
+    });
+
+    // It should have Sold Out badge and be disabled
+    const pantsButton = screen.getByText('Airport Exclusive Denim Pants').closest('button');
+    expect(pantsButton).toBeDisabled();
+    expect(screen.getByText('Sold Out')).toBeInTheDocument();
+  });
+
+  it('allows Branch-2 cashier to see and sell items in Branch-2 stock', async () => {
+    render(<CashierDashboard user={branch2Cashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      // Shared T-Shirt has 20 in Branch 2
+      expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
+      expect(screen.getByText('20 left')).toBeInTheDocument();
+
+      // Airport Exclusive Denim Pants has 30 in Branch 2 -> visible by default
+      expect(screen.getByText('Airport Exclusive Denim Pants')).toBeInTheDocument();
+      expect(screen.getByText('30 left')).toBeInTheDocument();
+
+      // Downtown Running Shoes has 15 in Branch 2 -> visible by default
+      expect(screen.getByText('Downtown Running Shoes')).toBeInTheDocument();
+      expect(screen.getByText('15 left')).toBeInTheDocument();
+
+      // Legacy Airport Souvenir is visible with 10 left
+      expect(screen.getByText('Legacy Airport Souvenir')).toBeInTheDocument();
+      expect(screen.getByText('10 left')).toBeInTheDocument();
+    });
+
+    // Legacy Downtown Mug belongs to Branch-1, so it is sold out in Branch-2
+    expect(screen.queryByText('Legacy Downtown Mug')).not.toBeInTheDocument();
+
+    // Branch 2 cashier can add Denim Pants to cart
+    fireEvent.click(screen.getByText('Airport Exclusive Denim Pants'));
+    expect(screen.getByText('1 items selected')).toBeInTheDocument();
+  });
+
+  it('enforces branch-specific stock limits when adding items to cart', async () => {
+    render(<CashierDashboard user={branch1Cashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
+    });
+
+    const shirtBtn = screen.getByText('Shared MultiBranch T-Shirt');
+
+    // Click 5 times (Branch 1 only has 5 in stock, even though Branch 2 has 20 and total stock is 25)
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(shirtBtn);
+    }
+
+    // Cart should have quantity 5
+    expect(screen.getByText('5 items selected')).toBeInTheDocument();
+
+    // 6th click should NOT increase quantity
+    fireEvent.click(shirtBtn);
+    expect(screen.getByText('5 items selected')).toBeInTheDocument();
+  });
+
+  it('prevents adding other branch stock via barcode scan and allows valid branch stock', async () => {
+    render(<CashierDashboard user={branch1Cashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Shared MultiBranch T-Shirt')).toBeInTheDocument();
+    });
+
+    // Open barcode scanner modal
+    const scanBtn = screen.getByTitle('Scan barcode with camera');
+    fireEvent.click(scanBtn);
+
+    const scannerInput = screen.getByTestId('scanner-input');
+
+    // Scan barcode 888002 (Pants with 0 stock in Branch-1, 30 in Branch-2)
+    fireEvent.change(scannerInput, { target: { value: '888002' } });
+
+    // Cart should still be empty (0 items selected)
+    expect(screen.getByText('0 items selected')).toBeInTheDocument();
+    // Scan barcode 888001 (Shirt with 5 in Branch-1)
+    fireEvent.change(scannerInput, { target: { value: '888001' } });
+
+    // Cart should now have 1 item
+    expect(screen.getByText('1 items selected')).toBeInTheDocument();
   });
 });

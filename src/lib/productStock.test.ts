@@ -259,4 +259,109 @@ describe('Product Stock Schema Restructuring & Multi-branch Stock Logic', () => 
       expect(updatedStocks.find(s => s.branch_id === 'b-2')?.quantity).toBe(20); // Unchanged
     });
   });
+
+  describe('Cashier Branch Stock View & Isolation', () => {
+    it('strictly maps product stock to cashier branch quantity and never leaks global/other-branch stock', () => {
+      const cashierBranchId = 'branch-main';
+      const otherBranchId = 'branch-north';
+
+      const products: Product[] = [
+        {
+          id: 'prod-1',
+          name: 'Item In Both Branches',
+          sku: 'SKU-1',
+          barcode: '111',
+          price: 100,
+          cost: 50,
+          min_stock_level: 2,
+          stock: 35, // Global total: 10 + 25
+          stocks: [
+            { id: 's-1', product_id: 'prod-1', branch_id: 'branch-main', quantity: 10 },
+            { id: 's-2', product_id: 'prod-1', branch_id: 'branch-north', quantity: 25 }
+          ],
+          category: 'General',
+          created_at: ''
+        },
+        {
+          id: 'prod-2',
+          name: 'Item Only In North Branch',
+          sku: 'SKU-2',
+          barcode: '222',
+          price: 200,
+          cost: 100,
+          min_stock_level: 2,
+          stock: 50, // Only in North branch
+          stocks: [
+            { id: 's-3', product_id: 'prod-2', branch_id: 'branch-north', quantity: 50 }
+          ],
+          category: 'General',
+          created_at: ''
+        },
+        {
+          id: 'prod-3',
+          name: 'Legacy Single Branch Item',
+          sku: 'SKU-3',
+          barcode: '333',
+          price: 300,
+          cost: 150,
+          min_stock_level: 2,
+          stock: 7,
+          branch_id: 'branch-main',
+          category: 'General',
+          created_at: ''
+        },
+        {
+          id: 'prod-4',
+          name: 'Legacy Other Branch Item',
+          sku: 'SKU-4',
+          barcode: '444',
+          price: 400,
+          cost: 200,
+          min_stock_level: 2,
+          stock: 12,
+          branch_id: 'branch-north',
+          category: 'General',
+          created_at: ''
+        }
+      ];
+
+      const resolveBranchProducts = (prods: Product[], branchId: string) => {
+        return prods.map(p => {
+          let branchStock = 0;
+          if (p.stocks && p.stocks.length > 0) {
+            const match = p.stocks.find(s => s.branch_id.trim().toLowerCase() === branchId.trim().toLowerCase());
+            branchStock = match ? (Number(match.quantity) || 0) : 0;
+          } else if (p.branch_id && p.branch_id.trim().toLowerCase() !== branchId.trim().toLowerCase()) {
+            branchStock = 0;
+          } else {
+            branchStock = Number(p.stock) || 0;
+          }
+          return {
+            ...p,
+            stock: branchStock,
+            branch_id: branchId
+          };
+        });
+      };
+
+      const mainBranchView = resolveBranchProducts(products, cashierBranchId);
+      const northBranchView = resolveBranchProducts(products, otherBranchId);
+
+      // Main branch cashier view:
+      // prod-1: 10 units (not 35, not 25)
+      expect(mainBranchView.find(p => p.id === 'prod-1')?.stock).toBe(10);
+      // prod-2: 0 units (not 50)
+      expect(mainBranchView.find(p => p.id === 'prod-2')?.stock).toBe(0);
+      // prod-3 (legacy main): 7 units
+      expect(mainBranchView.find(p => p.id === 'prod-3')?.stock).toBe(7);
+      // prod-4 (legacy north): 0 units
+      expect(mainBranchView.find(p => p.id === 'prod-4')?.stock).toBe(0);
+
+      // North branch cashier view:
+      expect(northBranchView.find(p => p.id === 'prod-1')?.stock).toBe(25);
+      expect(northBranchView.find(p => p.id === 'prod-2')?.stock).toBe(50);
+      expect(northBranchView.find(p => p.id === 'prod-3')?.stock).toBe(0);
+      expect(northBranchView.find(p => p.id === 'prod-4')?.stock).toBe(12);
+    });
+  });
 });

@@ -618,7 +618,11 @@ export const dbService = {
           if (match) {
             stock = Number(match.quantity) || 0;
           } else if (prodStocks.length === 0) {
-            stock = Number(p.stock) || 0;
+            if (p.branch_id && targetBranch && p.branch_id.toLowerCase() !== targetBranch.id.toLowerCase() && p.branch_id.toLowerCase() !== selectedBranchId.toLowerCase()) {
+              stock = 0;
+            } else {
+              stock = Number(p.stock) || 0;
+            }
           } else {
             stock = 0;
           }
