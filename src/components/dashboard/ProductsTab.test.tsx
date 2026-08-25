@@ -2,7 +2,21 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import ProductsTab from './ProductsTab';
 import { Product, UserProfile } from '../../types';
+import { fireEvent } from '@testing-library/react';
 
+vi.mock('../BarcodeScannerModal', () => ({
+  default: ({ isOpen, onScan }: { isOpen: boolean; onScan: (code: string) => void }) => {
+    if (!isOpen) return null;
+    return (
+      <div data-testid="mock-scanner-modal">
+        <input
+          data-testid="scanner-input"
+          onChange={(e) => onScan(e.target.value)}
+        />
+      </div>
+    );
+  }
+}));
 const mockUser: UserProfile = {
   id: 'user-1',
   name: 'Store Owner',
@@ -172,5 +186,69 @@ describe('ProductsTab sorting behavior', () => {
     const deleteButtons = screen.queryAllByTitle('Delete Product');
     expect(deleteButtons.length).toBe(0);
     expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+  });
+
+  it('opens quick restock modal when scanning a barcode via camera scanner', () => {
+    const mockRestock = vi.fn();
+    render(
+      <ProductsTab
+        user={mockUser}
+        branches={[]}
+        selectedBranchId="all"
+        setSelectedBranchId={vi.fn()}
+        displayProducts={mockProducts}
+        categories={['Fruits', 'Toys', 'Services']}
+        setShowCsvModal={vi.fn()}
+        handleExportCsv={vi.fn()}
+        openBarcodeModal={vi.fn()}
+        startEditProduct={vi.fn()}
+        openQuickRestock={mockRestock}
+        triggerDeleteProduct={vi.fn()}
+      />
+    );
+
+    // Open scanner modal
+    const scanBtn = screen.getByTitle('Scan barcode to restock');
+    fireEvent.click(scanBtn);
+
+    // Simulate scanning barcode "1004" (Banana Bunch)
+    const scannerInput = screen.getByTestId('scanner-input');
+    fireEvent.change(scannerInput, { target: { value: '1004' } });
+
+    expect(mockRestock).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'prod-in-banana',
+      name: 'Banana Bunch',
+      barcode: '1004'
+    }));
+  });
+
+  it('opens quick restock modal when scanning or pressing Enter with barcode in search bar', () => {
+    const mockRestock = vi.fn();
+    render(
+      <ProductsTab
+        user={mockUser}
+        branches={[]}
+        selectedBranchId="all"
+        setSelectedBranchId={vi.fn()}
+        displayProducts={mockProducts}
+        categories={['Fruits', 'Toys', 'Services']}
+        setShowCsvModal={vi.fn()}
+        handleExportCsv={vi.fn()}
+        openBarcodeModal={vi.fn()}
+        startEditProduct={vi.fn()}
+        openQuickRestock={mockRestock}
+        triggerDeleteProduct={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByPlaceholderText('Search Name, SKU, or Barcode...');
+    fireEvent.change(searchInput, { target: { value: '1003' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+
+    expect(mockRestock).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'prod-in-orange',
+      name: 'Orange Fresh',
+      barcode: '1003'
+    }));
   });
 });

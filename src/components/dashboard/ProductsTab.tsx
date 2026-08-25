@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Search, FileSpreadsheet, Download, Package, ChevronDown, Printer, Edit2, PackagePlus, Trash2, ChevronLeft, ChevronRight, Filter, Building2, Layers } from 'lucide-react';
+import { Search, FileSpreadsheet, Download, Package, ChevronDown, Printer, Edit2, PackagePlus, Trash2, ChevronLeft, ChevronRight, Filter, Building2, Layers, Camera } from 'lucide-react';
 import { formatCurrency } from '../../utils/format';
 import { UserProfile, Branch, Product } from '../../types';
 import SearchableCategorySelect from '../SearchableCategorySelect';
 import FilterDrawer from '../FilterDrawer';
+import BarcodeScannerModal from '../BarcodeScannerModal';
+import { useToast } from '../../utils/toast';
 
 interface ProductsTabProps {
   user: UserProfile;
@@ -42,8 +44,44 @@ export default function ProductsTab({
   const [productPage, setProductPage] = useState(1);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const { toast } = useToast();
   const isOwner = user.role === 'owner';
 
+  const handleBarcodeScan = (scannedCode: string) => {
+    const raw = (scannedCode || '').trim();
+    if (!raw) return;
+    const match = displayProducts.find(p =>
+      (p.barcode && p.barcode.trim().toLowerCase() === raw.toLowerCase()) ||
+      (p.sku && p.sku.trim().toLowerCase() === raw.toLowerCase())
+    );
+    if (match) {
+      setShowScanner(false);
+      openQuickRestock(match);
+      toast(`Found ${match.name} for restock.`, 'success');
+    } else {
+      toast(`No product found for barcode: ${scannedCode}`, 'error');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const val = productSearch.trim().toLowerCase();
+      if (val) {
+        const match = displayProducts.find(p =>
+          (p.barcode && p.barcode.trim().toLowerCase() === val) ||
+          (p.sku && p.sku.trim().toLowerCase() === val)
+        );
+        if (match) {
+          e.preventDefault();
+          openQuickRestock(match);
+          setProductSearch('');
+          setProductPage(1);
+          toast(`Found ${match.name} for restock.`, 'success');
+        }
+      }
+    }
+  };
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (productSearch.trim()) count++;
@@ -123,9 +161,18 @@ export default function ProductsTab({
               placeholder="Search Name, SKU, or Barcode..."
               value={productSearch}
               onChange={(e) => { setProductSearch(e.target.value); setProductPage(1); }}
+              onKeyDown={handleSearchKeyDown}
               className="w-full pl-9 pr-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-gray-900 shadow-2xs transition-colors"
             />
           </div>
+
+          <button
+            onClick={() => setShowScanner(true)}
+            className="shrink-0 p-2 bg-black hover:bg-gray-800 text-white rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+            title="Scan barcode to restock"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
 
           <button
             onClick={() => setShowFilterDrawer(true)}
@@ -221,6 +268,7 @@ export default function ProductsTab({
                 placeholder="Product name, SKU, barcode..."
                 value={productSearch}
                 onChange={(e) => { setProductSearch(e.target.value); setProductPage(1); }}
+                onKeyDown={handleSearchKeyDown}
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-black focus:bg-white"
               />
             </div>
@@ -646,6 +694,12 @@ export default function ProductsTab({
           </>
         )}
       </div>
+
+      <BarcodeScannerModal
+        isOpen={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 }
