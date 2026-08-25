@@ -78,14 +78,14 @@ export default function ProductsTab({
       const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
       
       let matchesStock = true;
+      const isTracked = p.use_stock !== false && (p.use_stock as unknown) !== 'false';
       const pStock = Number(p.stock) || 0;
       const pMinStock = Number(p.min_stock_level) || 0;
       if (stockFilter === 'Low Stock') {
-        matchesStock = pStock <= pMinStock && pStock > 0;
+        matchesStock = isTracked && pStock <= pMinStock && pStock > 0;
       } else if (stockFilter === 'Out of Stock') {
-        matchesStock = pStock <= 0;
+        matchesStock = isTracked && pStock <= 0;
       }
-
       return matchesSearch && matchesCategory && matchesStock;
     });
 
@@ -299,9 +299,9 @@ export default function ProductsTab({
             {/* Mobile Cards View */}
             <div className="grid grid-cols-1 gap-3 sm:hidden p-4">
               {paginatedProducts.map((prod) => {
-                const isLowStock = prod.stock <= prod.min_stock_level;
-                const isOutOfStock = prod.stock === 0;
-
+                const isTracked = prod.use_stock !== false && (prod.use_stock as unknown) !== 'false';
+                const isLowStock = isTracked && (Number(prod.stock) || 0) <= (prod.min_stock_level ?? 5);
+                const isOutOfStock = isTracked && (Number(prod.stock) || 0) <= 0;
                 return (
                   <div 
                     key={prod.id} 
@@ -342,13 +342,15 @@ export default function ProductsTab({
                           return (
                             <div>
                               <span className={`inline-block font-mono text-[10px] font-bold ${
-                                isOutOfStock 
-                                  ? (otherBranchesWithStock.length > 0 ? 'text-amber-700' : 'text-red-600') 
-                                  : isLowStock 
-                                    ? 'text-gray-900' 
-                                    : 'text-gray-900'
+                                !isTracked
+                                  ? 'text-slate-600'
+                                  : isOutOfStock 
+                                    ? (otherBranchesWithStock.length > 0 ? 'text-amber-700' : 'text-red-600') 
+                                    : isLowStock 
+                                      ? 'text-gray-900' 
+                                      : 'text-gray-900'
                               }`}>
-                                {prod.stock} {prod.unit_name || 'ခု'}
+                                {!isTracked ? 'Untracked' : `${prod.stock} ${prod.unit_name || 'ခု'}`}
                               </span>
                               {selectedBranchId !== 'all' && otherBranchesWithStock.length > 0 && (
                                 <p className="text-[8px] text-slate-500 font-medium leading-tight mt-0.5">
@@ -363,7 +365,9 @@ export default function ProductsTab({
 
                     <div className="flex justify-between items-center pt-1">
                       <div className="text-[9px] font-medium">
-                        {isOutOfStock ? (
+                        {!isTracked ? (
+                          <span className="text-slate-500 font-semibold">Untracked</span>
+                        ) : isOutOfStock ? (
                           <span className="text-red-600 font-bold">Reorder Immediately</span>
                         ) : isLowStock ? (
                           <span className="text-gray-900">Low (≤{prod.min_stock_level})</span>
@@ -433,9 +437,9 @@ export default function ProductsTab({
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {paginatedProducts.map((prod) => {
-                    const isLowStock = prod.stock <= prod.min_stock_level;
-                    const isOutOfStock = prod.stock === 0;
-
+                    const isTracked = prod.use_stock !== false && (prod.use_stock as unknown) !== 'false';
+                    const isLowStock = isTracked && (Number(prod.stock) || 0) <= (prod.min_stock_level ?? 5);
+                    const isOutOfStock = isTracked && (Number(prod.stock) || 0) <= 0;
                     return (
                       <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
                         {/* Name */}
@@ -490,13 +494,15 @@ export default function ProductsTab({
                             return (
                               <div className="flex flex-col items-center justify-center gap-0.5">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
-                                  isOutOfStock 
-                                    ? (otherBranchesWithStock.length > 0 ? 'bg-amber-100 text-amber-900 font-bold' : 'bg-red-100 text-red-800') 
-                                    : isLowStock 
-                                      ? 'bg-amber-100 text-amber-900' 
-                                      : 'bg-gray-100 text-gray-900'
+                                  !isTracked
+                                    ? 'bg-slate-100 text-slate-600'
+                                    : isOutOfStock 
+                                      ? (otherBranchesWithStock.length > 0 ? 'bg-amber-100 text-amber-900 font-bold' : 'bg-red-100 text-red-800') 
+                                      : isLowStock 
+                                        ? 'bg-amber-100 text-amber-900' 
+                                        : 'bg-gray-100 text-gray-900'
                                 }`}>
-                                  {prod.stock} {prod.unit_name || 'pcs'}
+                                  {!isTracked ? 'Untracked' : `${prod.stock} ${prod.unit_name || 'pcs'}`}
                                 </span>
                                 {selectedBranchId !== 'all' && otherBranchesWithStock.length > 0 && (
                                   <span 

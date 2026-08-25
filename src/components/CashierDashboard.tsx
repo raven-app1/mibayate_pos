@@ -208,17 +208,33 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     return unsubscribe;
   }, []);
 
+  const isStockTracked = (p?: Product | null): boolean => {
+    if (!p) return true;
+    return p.use_stock !== false && (p.use_stock as unknown) !== 'false';
+  };
+
+  const isProductOutOfStock = (p: Product): boolean => {
+    if (!isStockTracked(p)) return false;
+    return (Number(p.stock) || 0) <= 0;
+  };
+
+  const isProductLowStock = (p: Product): boolean => {
+    if (!isStockTracked(p)) return false;
+    const stock = Number(p.stock) || 0;
+    return stock > 0 && stock <= (p.min_stock_level ?? 5);
+  };
+
   const addToCart = (product: Product) => {
+    const isTracked = isStockTracked(product);
     const availableStock = Number(product.stock) || 0;
-    if (product.use_stock !== false && 1 > availableStock) {
+    if (isTracked && availableStock <= 0) {
       toast(`${product.name} is sold out (${availableStock} stock available).`, 'warning');
       return;
     }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
-        const availableStock = Number(product.stock) || 0;
-        if (product.use_stock !== false && (existing.quantity + 1) > availableStock) {
+        if (isTracked && (existing.quantity + 1) > availableStock) {
           toast(`Cannot add more than ${availableStock} units of ${product.name}`, 'warning');
           return prev;
         }
@@ -262,8 +278,9 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       p.barcode === barcode || p.sku === barcode
     );
     if (match) {
+      const isTracked = isStockTracked(match);
       const availableStock = Number(match.stock) || 0;
-      if (match.use_stock !== false && 1 > availableStock) {
+      if (isTracked && availableStock <= 0) {
         toast(`${match.name} is sold out (${availableStock} stock available).`, 'warning');
         return;
       }
@@ -272,7 +289,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     } else {
       toast(`No product found for barcode: ${barcode}`, 'error');
     }
-  }, [branchProducts, toast]);
+  }, [branchProducts, addToCart, toast]);
 
   const updateQuantity = (productId: string, delta: number) => {
     setCart(prev => {
@@ -281,8 +298,9 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
           const newQty = item.quantity + delta;
           if (newQty <= 0) return null;
           const currentProduct = branchProducts.find(p => p.id === productId);
+          const isTracked = isStockTracked(currentProduct || item.product);
           const availableStock = currentProduct ? (Number(currentProduct.stock) || 0) : (Number(item.product.stock) || 0);
-          if (item.product.use_stock !== false && newQty > availableStock) {
+          if (isTracked && newQty > availableStock) {
             toast(`Stock limit: ${availableStock} units available.`, 'warning');
             return item;
           }
@@ -333,7 +351,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const categories = useMemo(() => ['All', ...Array.from(new Set(branchProducts.map(p => p.category)))], [branchProducts]);
 
   const availableBranchProducts = useMemo(() => {
-    return branchProducts.filter(p => p.use_stock === false || (Number(p.stock) || 0) > 0);
+    return branchProducts.filter(p => !isProductOutOfStock(p));
   }, [branchProducts]);
 
   const categoryOptions = useMemo(() => {
@@ -350,7 +368,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
 
     return branchProducts.filter(p => {
       if (!p) return false;
-      const isOutOfStock = p.use_stock !== false && (Number(p.stock) || 0) <= 0;
+      const isOutOfStock = isProductOutOfStock(p);
 
       // When not searching (default view or category browsing), hide sold-out items
       if (!isSearching && isOutOfStock) {
@@ -652,8 +670,10 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-4">
                     {filteredProducts.map((prod) => {
-                      const isOutOfStock = prod.use_stock !== false && (Number(prod.stock) || 0) <= 0;
-                      const isLowStock = prod.use_stock !== false && (Number(prod.stock) || 0) <= (prod.min_stock_level ?? 5);
+                      const isTracked = isStockTracked(prod);
+                      const availableStock = Number(prod.stock) || 0;
+                      const isOutOfStock = isTracked && availableStock <= 0;
+                      const isLowStock = isTracked && availableStock > 0 && availableStock <= (prod.min_stock_level ?? 5);
                       const inCartCount = cart.find(item => item.product.id === prod.id)?.quantity || 0;
                       return (
                         <button
@@ -686,9 +706,15 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                           <div className="flex items-end justify-between mt-3 pt-2.5 border-t border-slate-100">
                             <span className="font-extrabold text-slate-900 text-sm font-mono">{formatCurrency(prod.price)}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isOutOfStock ? 'bg-red-100 text-red-700' : isLowStock ? 'bg-gray-100 text-gray-900' : 'bg-slate-100 text-slate-600'
+                              isOutOfStock
+                                ? 'bg-red-100 text-red-700'
+                                : !isTracked
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : isLowStock
+                                    ? 'bg-gray-100 text-gray-900'
+                                    : 'bg-slate-100 text-slate-600'
                             }`}>
-                              {isOutOfStock ? 'Sold Out' : `${prod.stock} left`}
+                              {isOutOfStock ? 'Sold Out' : !isTracked ? 'In Stock' : `${availableStock} left`}
                             </span>
                           </div>
                         </button>

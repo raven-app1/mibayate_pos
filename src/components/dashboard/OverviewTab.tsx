@@ -65,7 +65,10 @@ export default function OverviewTab({
     });
 
     const totalProfit = totalRevenue - totalCost;
-    const lowStockCount = displayProducts.filter(p => p.stock <= p.min_stock_level).length;
+    const lowStockCount = displayProducts.filter(p => {
+      const isTracked = p.use_stock !== false && (p.use_stock as unknown) !== 'false';
+      return isTracked && (Number(p.stock) || 0) <= (p.min_stock_level ?? 5);
+    }).length;
 
     // Category Sales Distribution
     const categoryMap: { [key: string]: number } = {};

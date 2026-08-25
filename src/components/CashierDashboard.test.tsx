@@ -244,6 +244,13 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
       expect(screen.getByText('In Stock Apple')).toBeInTheDocument();
     });
 
+    // Verify that non-stock tracked item shows 'In Stock' badge rather than '0 left'
+    const deliveryServiceBtn = screen.getByText('Delivery Service (No Stock Tracking)').closest('button');
+    expect(deliveryServiceBtn).toBeInTheDocument();
+    expect(deliveryServiceBtn).not.toBeDisabled();
+    expect(screen.getByText('In Stock')).toBeInTheDocument();
+    expect(screen.queryByText('0 left')).not.toBeInTheDocument();
+
     // Add in-stock product
     fireEvent.click(screen.getByText('In Stock Apple'));
     // Add non-stock tracked product
@@ -251,6 +258,30 @@ describe('CashierDashboard sold-out items visibility & search behavior', () => {
 
     // Verify cart header
     expect(screen.getByText('2 items selected')).toBeInTheDocument();
+  });
+
+  it('renders Sold Out badge and disables click when searching for 0-stock tracked items', async () => {
+    render(<CashierDashboard user={mockUser} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('In Stock Apple')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search products by name/i);
+    fireEvent.change(searchInput, { target: { value: 'Banana' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Sold Out Banana')).toBeInTheDocument();
+    });
+
+    const bananaBtn = screen.getByText('Sold Out Banana').closest('button');
+    expect(bananaBtn).toBeDisabled();
+    expect(screen.getByText('Sold Out')).toBeInTheDocument();
+    expect(screen.queryByText('0 left')).not.toBeInTheDocument();
+
+    // Clicking disabled button should not add to cart
+    fireEvent.click(bananaBtn!);
+    expect(screen.getByText('Cart is empty')).toBeInTheDocument();
   });
 });
 
