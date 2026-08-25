@@ -259,7 +259,9 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     if (isRestocking) return;
     setIsRestocking(true);
     try {
-      await dbService.products.restock(productId, quantity, user.name);
+      const targetBranchId = selectedBranchId !== 'all' ? selectedBranchId : (user.role === 'manager' && user.branch_id ? user.branch_id : undefined);
+      const targetBranchName = targetBranchId ? branches.find(b => b.id === targetBranchId)?.name : undefined;
+      await dbService.products.restock(productId, quantity, user.name, targetBranchId, targetBranchName);
       await loadData();
       setRestockProduct(null);
       setIsRestocking(false);
@@ -348,10 +350,23 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
   }, [sales, selectedBranchId]);
 
   const displayProducts = useMemo(() => {
-    return selectedBranchId === 'all'
-      ? products
-      : products.filter(p => !p.branch_id || p.branch_id === selectedBranchId);
-  }, [products, selectedBranchId]);
+    if (selectedBranchId === 'all') {
+      return products.map(p => ({
+        ...p,
+        stock: p.stocks ? p.stocks.reduce((sum, s) => sum + (s.quantity || 0), 0) : (p.stock || 0)
+      }));
+    }
+    const branchName = branches.find(b => b.id === selectedBranchId)?.name;
+    return products.map(p => {
+      const branchStock = p.stocks?.find(s => s.branch_id === selectedBranchId)?.quantity ?? 0;
+      return {
+        ...p,
+        stock: branchStock,
+        branch_id: selectedBranchId,
+        branch_name: branchName
+      };
+    });
+  }, [products, selectedBranchId, branches]);
 
   const displayCashiers = useMemo(() => {
     return selectedBranchId === 'all'

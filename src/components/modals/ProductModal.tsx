@@ -94,6 +94,14 @@ export default function ProductModal({
     }
   }, [editingProduct]);
 
+  useEffect(() => {
+    if (editingProduct && editingProduct.stocks && formValues.branch_id) {
+      const match = editingProduct.stocks.find(s => s.branch_id === formValues.branch_id);
+      if (match) {
+        setValue('stock', match.quantity);
+      }
+    }
+  }, [formValues.branch_id, editingProduct, setValue]);
   const fillGeneratedCodes = async () => {
     setIsGeneratingCodes(true);
     try {

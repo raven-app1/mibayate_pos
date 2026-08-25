@@ -36,6 +36,14 @@ export interface UserProfile {
   created_at: string;
 }
 
+export interface ProductStock {
+  id: string;
+  product_id: string;
+  branch_id: string;
+  quantity: number;
+  updated_at?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -43,7 +51,6 @@ export interface Product {
   barcode: string;
   price: number; // Unit Price
   cost: number; // Purchased Price
-  stock: number;
   min_stock_level: number;
   category: string;
   image?: string | null;
@@ -54,9 +61,17 @@ export interface Product {
   price_variant?: string;
   expiry_date?: string;
   updated_at?: string;
+  created_at: string;
+  // Joined / computed fields for branch-specific or total inventory display
+  stock?: number;
   branch_id?: string;
   branch_name?: string;
-  created_at: string;
+  stocks?: ProductStock[];
+}
+
+export interface ProductWithStock extends Product {
+  stock: number;
+  stocks?: ProductStock[];
 }
 
 export interface Sale {

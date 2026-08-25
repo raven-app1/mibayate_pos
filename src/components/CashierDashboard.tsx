@@ -184,7 +184,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     if (!silent) setIsLoading(true);
     try {
       const [data, biz] = await Promise.all([
-        dbService.products.getAll(),
+        dbService.products.getAll(user.branch_id || undefined),
         dbService.business.get()
       ]);
       setProducts(data);
@@ -226,9 +226,17 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   };
 
   const branchProducts = useMemo(() => {
-    if (!user.branch_id) return products;
-    return products.filter(p => !p.branch_id || p.branch_id === user.branch_id);
-  }, [products, user.branch_id]);
+    return products.map(p => {
+      if (!user.branch_id) return p;
+      const branchStock = p.stocks?.find(s => s.branch_id === user.branch_id)?.quantity ?? p.stock ?? 0;
+      return {
+        ...p,
+        stock: branchStock,
+        branch_id: user.branch_id,
+        branch_name: user.branch_name
+      };
+    });
+  }, [products, user.branch_id, user.branch_name]);
 
   const handleBarcodeScan = useCallback((barcode: string) => {
     const match = branchProducts.find(p =>
