@@ -475,11 +475,36 @@ export const dbService = {
 
     async delete(id: string): Promise<void> {
       if (!supabase) throw new Error('Supabase not configured.');
-      await supabase.from('profiles').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
-      await supabase.from('product_stock').delete().eq('branch_id', id);
-      await supabase.from('sales').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
-      await supabase.from('inventory_transactions').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
-      await supabase.from('cash_flow').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      try {
+        await supabase.from('profiles').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      } catch (err) {
+        console.warn('profiles branch unlink warning:', err);
+      }
+      try {
+        await supabase.from('product_stock').delete().eq('branch_id', id);
+      } catch (err) {
+        console.warn('product_stock delete warning:', err);
+      }
+      try {
+        await supabase.from('sales').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      } catch (err) {
+        console.warn('sales branch unlink warning:', err);
+      }
+      try {
+        await supabase.from('inventory_transactions').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      } catch (err) {
+        console.warn('inventory_transactions branch unlink warning:', err);
+      }
+      try {
+        await supabase.from('cash_flow').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      } catch (err) {
+        console.warn('cash_flow branch unlink warning:', err);
+      }
+      try {
+        await supabase.from('sale_delete_requests').update({ branch_id: null, branch_name: null }).eq('branch_id', id);
+      } catch (err) {
+        console.warn('sale_delete_requests branch unlink warning:', err);
+      }
       const { error } = await supabase.from('branches').delete().eq('id', id);
       if (error) throw error;
       notifyDataChanged('branches');

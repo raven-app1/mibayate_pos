@@ -237,7 +237,7 @@ INSERT INTO public.branches (id, name, code, address, phone, is_active)
 VALUES ('branch-default', 'Main Store', 'MAIN', 'Yangon, Myanmar', '+95 9 123 456 789', true)
 ON CONFLICT (id) DO NOTHING;
 
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_branch_id_fk FOREIGN KEY (branch_id) REFERENCES public.branches(id);
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_branch_id_fk FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON DELETE SET NULL ON UPDATE CASCADE;
 -- ── 3. Products ──────────────────────────────────────────────
 CREATE TABLE public.products (
     id              TEXT PRIMARY KEY,
@@ -299,7 +299,7 @@ CREATE POLICY "Authorized users can delete products"
 CREATE TABLE public.product_stock (
     id          TEXT PRIMARY KEY,
     product_id  TEXT NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-    branch_id   TEXT NOT NULL REFERENCES public.branches(id) ON DELETE CASCADE,
+    branch_id   TEXT NOT NULL REFERENCES public.branches(id) ON DELETE CASCADE ON UPDATE CASCADE,
     quantity    INTEGER NOT NULL DEFAULT 0,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT timezone('Asia/Yangon', now()),
     CONSTRAINT product_stock_product_branch_key UNIQUE (product_id, branch_id)
@@ -339,7 +339,7 @@ CREATE TABLE public.sales (
     id              TEXT PRIMARY KEY,
     cashier_id      UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     cashier_name    TEXT NOT NULL,
-    branch_id       TEXT REFERENCES public.branches(id),
+    branch_id       TEXT REFERENCES public.branches(id) ON DELETE SET NULL ON UPDATE CASCADE,
     branch_name     TEXT,
     total_amount    NUMERIC NOT NULL,
     discount        NUMERIC NOT NULL DEFAULT 0,
@@ -429,8 +429,8 @@ CREATE TABLE public.inventory_transactions (
     id          TEXT PRIMARY KEY,
     product_id  TEXT REFERENCES public.products(id) ON DELETE SET NULL,
     product_name TEXT NOT NULL,
-    branch_id   TEXT NOT NULL REFERENCES public.branches(id),
-    branch_name TEXT NOT NULL,
+    branch_id   TEXT REFERENCES public.branches(id) ON DELETE SET NULL ON UPDATE CASCADE,
+    branch_name TEXT,
     type        TEXT NOT NULL CHECK (type IN ('stock-in', 'stock-out', 'sale', 'adjustment')),
     quantity    INTEGER NOT NULL,
     notes       TEXT,
@@ -460,6 +460,22 @@ CREATE POLICY "Authorized users can insert inventory_transactions"
     )
   );
 
+CREATE POLICY "Authorized users can update inventory_transactions"
+  ON public.inventory_transactions FOR UPDATE
+  USING (
+    auth.role() = 'authenticated'
+    AND (
+      public.current_user_can_manage_product(branch_id)
+      OR public.current_user_is_owner()
+    )
+  );
+
+CREATE POLICY "Authorized users can delete inventory_transactions"
+  ON public.inventory_transactions FOR DELETE
+  USING (
+    auth.role() = 'authenticated'
+    AND public.current_user_is_owner()
+  );
 -- ── 7. Business Settings ─────────────────────────────────────
 CREATE TABLE public.business_settings (
     id              TEXT PRIMARY KEY DEFAULT 'main',
@@ -498,7 +514,7 @@ CREATE TABLE public.cash_flow (
     title          TEXT NOT NULL,
     amount         NUMERIC NOT NULL,
     payment_method TEXT NOT NULL DEFAULT 'cash',
-    branch_id      TEXT REFERENCES public.branches(id),
+    branch_id      TEXT REFERENCES public.branches(id) ON DELETE SET NULL ON UPDATE CASCADE,
     branch_name    TEXT,
     notes          TEXT,
     performed_by   TEXT NOT NULL,
@@ -530,7 +546,7 @@ CREATE TABLE public.sale_delete_requests (
     sale_id          TEXT REFERENCES public.sales(id) ON DELETE SET NULL,
     cashier_id       UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     cashier_name     TEXT NOT NULL,
-    branch_id        TEXT REFERENCES public.branches(id),
+    branch_id        TEXT REFERENCES public.branches(id) ON DELETE SET NULL ON UPDATE CASCADE,
     branch_name      TEXT,
     total_amount     NUMERIC NOT NULL,
     reason           TEXT,

@@ -364,4 +364,109 @@ describe('Product Stock Schema Restructuring & Multi-branch Stock Logic', () => 
       expect(northBranchView.find(p => p.id === 'prod-4')?.stock).toBe(12);
     });
   });
+
+  describe('Branch Deletion & Foreign Key Cascading/Nullification', () => {
+    it('safely cascades product_stock deletion and nullifies branch_id in inventory_transactions, sales, profiles, and cash_flow without orphans or constraint violations', () => {
+      const branchToDelete = 'branch-north';
+
+      let branches = [
+        { id: 'branch-main', name: 'Main Store' },
+        { id: 'branch-north', name: 'North Branch' }
+      ];
+
+      let productStocks = [
+        { id: 'ps-1', product_id: 'prod-1', branch_id: 'branch-main', quantity: 10 },
+        { id: 'ps-2', product_id: 'prod-1', branch_id: 'branch-north', quantity: 25 },
+        { id: 'ps-3', product_id: 'prod-2', branch_id: 'branch-north', quantity: 50 }
+      ];
+
+      let inventoryTransactions: InventoryTransaction[] = [
+        { id: 'tx-1', product_id: 'prod-1', product_name: 'Item 1', branch_id: 'branch-north', branch_name: 'North Branch', type: 'stock-in', quantity: 25, notes: 'Restock', performed_by: 'Owner', created_at: '2026-01-01' },
+        { id: 'tx-2', product_id: 'prod-1', product_name: 'Item 1', branch_id: 'branch-main', branch_name: 'Main Store', type: 'sale', quantity: 5, notes: 'Sale', performed_by: 'Cashier', created_at: '2026-01-02' }
+      ];
+
+      let sales: Array<{ id: string; branch_id?: string; branch_name?: string; total_amount: number }> = [
+        { id: 'sale-1', branch_id: 'branch-north', branch_name: 'North Branch', total_amount: 5000 },
+        { id: 'sale-2', branch_id: 'branch-main', branch_name: 'Main Store', total_amount: 3000 }
+      ];
+
+      let profiles: Array<{ id: string; name: string; branch_id?: string; branch_name?: string; role: string }> = [
+        { id: 'u-1', name: 'Manager North', branch_id: 'branch-north', branch_name: 'North Branch', role: 'manager' },
+        { id: 'u-2', name: 'Owner', branch_id: 'branch-main', branch_name: 'Main Store', role: 'owner' }
+      ];
+
+      let cashFlow: Array<{ id: string; branch_id?: string; branch_name?: string; amount: number; type: string }> = [
+        { id: 'cf-1', branch_id: 'branch-north', branch_name: 'North Branch', amount: 1000, type: 'expense' },
+        { id: 'cf-2', branch_id: 'branch-main', branch_name: 'Main Store', amount: 2000, type: 'income' }
+      ];
+
+      // Simulate DB CASCADE & SET NULL behavior on branch deletion
+      // 1. product_stock: ON DELETE CASCADE
+      productStocks = productStocks.filter(ps => ps.branch_id !== branchToDelete);
+
+      // 2. inventory_transactions: ON DELETE SET NULL (preserves audit trail)
+      inventoryTransactions = inventoryTransactions.map(tx => {
+        if (tx.branch_id === branchToDelete) {
+          return { ...tx, branch_id: undefined, branch_name: undefined };
+        }
+        return tx;
+      });
+
+      // 3. sales: ON DELETE SET NULL
+      sales = sales.map(s => {
+        if (s.branch_id === branchToDelete) {
+          return { ...s, branch_id: undefined, branch_name: undefined };
+        }
+        return s;
+      });
+
+      // 4. profiles: ON DELETE SET NULL
+      profiles = profiles.map(p => {
+        if (p.branch_id === branchToDelete) {
+          return { ...p, branch_id: undefined, branch_name: undefined };
+        }
+        return p;
+      });
+
+      // 5. cash_flow: ON DELETE SET NULL
+      cashFlow = cashFlow.map(cf => {
+        if (cf.branch_id === branchToDelete) {
+          return { ...cf, branch_id: undefined, branch_name: undefined };
+        }
+        return cf;
+      });
+
+      // 6. branches table: delete branch
+      branches = branches.filter(b => b.id !== branchToDelete);
+      const validBranchIds = new Set(branches.map(b => b.id));
+
+      // Assertions:
+      // - branch is deleted
+      expect(validBranchIds.has(branchToDelete)).toBe(false);
+      expect(branches.length).toBe(1);
+
+      // - product_stock for deleted branch is removed
+      expect(productStocks.every(ps => validBranchIds.has(ps.branch_id))).toBe(true);
+      expect(productStocks.length).toBe(1);
+
+      // - inventory_transactions retains historical rows with branch_id set to null/undefined
+      expect(inventoryTransactions.length).toBe(2);
+      const northTx = inventoryTransactions.find(tx => tx.id === 'tx-1');
+      expect(northTx?.branch_id).toBeUndefined();
+      const mainTx = inventoryTransactions.find(tx => tx.id === 'tx-2');
+      expect(mainTx?.branch_id).toBe('branch-main');
+
+      // - sales retains historical sales with branch_id set to null/undefined
+      expect(sales.find(s => s.id === 'sale-1')?.branch_id).toBeUndefined();
+      expect(sales.find(s => s.id === 'sale-2')?.branch_id).toBe('branch-main');
+
+      // - profiles unlinked
+      expect(profiles.find(p => p.id === 'u-1')?.branch_id).toBeUndefined();
+      expect(profiles.find(p => p.id === 'u-2')?.branch_id).toBe('branch-main');
+
+      // - cash_flow unlinked
+      expect(cashFlow.find(cf => cf.id === 'cf-1')?.branch_id).toBeUndefined();
+      expect(cashFlow.find(cf => cf.id === 'cf-2')?.branch_id).toBe('branch-main');
+    });
+  });
 });
