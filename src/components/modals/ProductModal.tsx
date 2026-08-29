@@ -53,8 +53,8 @@ export default function ProductModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingCodes, setIsGeneratingCodes] = useState(false);
   const [isProductNameFocused, setIsProductNameFocused] = useState(false);
-  const [branchStockMap, setBranchStockMap] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
+  const [branchStockMap, setBranchStockMap] = useState<Record<string, number | string>>(() => {
+    const initial: Record<string, number | string> = {};
     branches.forEach(b => {
       const match = editingProduct?.stocks?.find(s => s.branch_id === b.id);
       if (match) {
@@ -65,7 +65,7 @@ export default function ProductModal({
         initial[b.id] = 0;
       }
     });
-    const totalAssigned = Object.values(initial).reduce((sum: number, v: number) => sum + v, 0);
+    const totalAssigned = Object.values(initial).reduce((sum: number, v: number | string) => sum + (Number(v) || 0), 0);
     if (totalAssigned === 0 && editingProduct?.stock && branches[0]) {
       const targetId = editingProduct.branch_id || branches[0].id;
       initial[targetId] = Number(editingProduct.stock) || 0;
@@ -74,7 +74,7 @@ export default function ProductModal({
   });
 
   const computedTotalStock = useMemo(() => {
-    return Object.values(branchStockMap).reduce((sum: number, v: number) => sum + (Number(v) || 0), 0);
+    return Object.values(branchStockMap).reduce((sum: number, v: number | string) => sum + (Number(v) || 0), 0);
   }, [branchStockMap]);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ProductFormData>({
@@ -462,10 +462,28 @@ export default function ProductModal({
                             type="number"
                             min="0"
                             disabled={user.role === 'manager' && user.branch_id !== b.id}
-                            value={branchStockMap[b.id] ?? 0}
+                            value={branchStockMap[b.id] ?? ''}
+                            onFocus={(e) => {
+                              if (e.target.value === '0') {
+                                e.target.select();
+                              }
+                            }}
                             onChange={(e) => {
-                              const val = Math.max(0, parseInt(e.target.value, 10) || 0);
-                              setBranchStockMap(prev => ({ ...prev, [b.id]: val }));
+                              const raw = e.target.value;
+                              if (raw === '') {
+                                setBranchStockMap(prev => ({ ...prev, [b.id]: '' }));
+                                return;
+                              }
+                              const parsed = parseInt(raw, 10);
+                              setBranchStockMap(prev => ({
+                                ...prev,
+                                [b.id]: isNaN(parsed) ? '' : Math.max(0, parsed)
+                              }));
+                            }}
+                            onBlur={() => {
+                              if (branchStockMap[b.id] === '') {
+                                setBranchStockMap(prev => ({ ...prev, [b.id]: 0 }));
+                              }
                             }}
                             className="w-full p-1.5 bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-md text-right font-mono font-bold text-xs focus:outline-none focus:border-gray-900"
                           />

@@ -588,3 +588,146 @@ describe('CashierDashboard multi-branch product stock isolation', () => {
     expect(screen.getByText('1 items selected')).toBeInTheDocument();
   });
 });
+
+describe('CashierDashboard tax check / uncheck functionality', () => {
+  const taxCashier: UserProfile = {
+    id: 'cashier-tax-1',
+    name: 'Tax Tester',
+    email: 'taxtester@pos.com',
+    role: 'cashier',
+    branch_id: 'branch-1',
+    branch_name: 'Main Store',
+    created_at: new Date().toISOString()
+  };
+
+  const taxProduct: Product = {
+    id: 'prod-tax-test',
+    name: 'Taxable Goods',
+    sku: 'TAX-01',
+    barcode: '999999',
+    price: 1000,
+    cost: 500,
+    stock: 10,
+    category: 'General',
+    use_stock: true,
+    min_stock_level: 1,
+    created_at: ''
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(dbService.products.getAll).mockResolvedValue([taxProduct]);
+    vi.mocked(dbService.business.get).mockResolvedValue({
+      name: 'Tax Test Store',
+      currency: 'Ks',
+      tax_rate: 5
+    });
+    vi.mocked(dbService.sales.getAllWithItems).mockResolvedValue([]);
+    vi.mocked(dbService.saleDeleteRequests.getAll).mockResolvedValue([]);
+  });
+
+  it('renders tax checkbox unchecked by default and adds tax only when checked', async () => {
+    render(<CashierDashboard user={taxCashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Taxable Goods')).toBeInTheDocument();
+    });
+
+    // Add 1 item (price: 1000)
+    fireEvent.click(screen.getByText('Taxable Goods'));
+
+    // Checkbox should be present, unchecked by default
+    const checkbox = screen.getByTestId('tax-checkbox') as HTMLInputElement;
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox.checked).toBe(false);
+
+    // Total Due should be 1,000 Ks without tax
+    expect(screen.getAllByText('1,000 Ks').length).toBeGreaterThan(0);
+
+    // Check tax
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    // Tax (5%) of 1,000 is 50 Ks -> Total Due 1,050 Ks
+    await waitFor(() => {
+      expect(screen.getByText('50 Ks')).toBeInTheDocument();
+      expect(screen.getAllByText('1,050 Ks').length).toBeGreaterThan(0);
+    });
+
+    // Uncheck tax
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    // Total Due returns to 1,000 Ks and tax amount to 0 Ks
+    await waitFor(() => {
+      expect(screen.getByText('0 Ks')).toBeInTheDocument();
+      expect(screen.queryAllByText('1,050 Ks').length).toBe(0);
+    });
+  });
+
+  it('passes tax amount to checkout when checked and resets to unchecked on next order', async () => {
+    const mockCheckout = vi.fn().mockResolvedValue({
+      id: 'sale-test-1',
+      cashier_id: taxCashier.id,
+      cashier_name: taxCashier.name,
+      branch_id: taxCashier.branch_id,
+      branch_name: taxCashier.branch_name,
+      total_amount: 1050,
+      discount: 0,
+      payment_method: 'cash',
+      created_at: new Date().toISOString(),
+      items: [{
+        id: 'item-1',
+        sale_id: 'sale-test-1',
+        product_id: taxProduct.id,
+        product_name: taxProduct.name,
+        quantity: 1,
+        unit_price: 1000,
+        unit_cost: 500,
+        total: 1000
+      }]
+    });
+    vi.mocked(dbService.sales.checkout).mockImplementation(mockCheckout);
+
+    render(<CashierDashboard user={taxCashier} onLogout={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Taxable Goods')).toBeInTheDocument();
+    });
+
+    // Add item to cart
+    fireEvent.click(screen.getByText('Taxable Goods'));
+
+    // Check tax box
+    const checkbox = screen.getByTestId('tax-checkbox') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    // Submit checkout
+    const checkoutBtn = screen.getByText(/Process Checkout/i);
+    fireEvent.click(checkoutBtn);
+
+    await waitFor(() => {
+      expect(mockCheckout).toHaveBeenCalledWith(
+        expect.any(Array),
+        'cash',
+        0,
+        taxCashier,
+        { name: '', phone: '' },
+        50
+      );
+      // Receipt should show
+      expect(screen.getByText('New Sale')).toBeInTheDocument();
+    });
+
+    // Start New Sale
+    fireEvent.click(screen.getByText('New Sale'));
+
+    // Add another item
+    fireEvent.click(screen.getByText('Taxable Goods'));
+
+    // Checkbox MUST be unchecked by default for next order
+    const nextCheckbox = screen.getByTestId('tax-checkbox') as HTMLInputElement;
+    expect(nextCheckbox.checked).toBe(false);
+  });
+});

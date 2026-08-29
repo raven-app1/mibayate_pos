@@ -1125,16 +1125,31 @@ export default function CashierSalesHistory({
 
               {/* Financial Totals */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>Subtotal</span>
-                  <span className="font-mono font-medium">{formatCurrency(selectedSale.total_amount + (selectedSale.discount || 0))}</span>
-                </div>
-                {selectedSale.discount > 0 && (
-                  <div className="flex justify-between text-red-600 font-medium">
-                    <span>Discount</span>
-                    <span className="font-mono">-{formatCurrency(selectedSale.discount)}</span>
-                  </div>
-                )}
+                {(() => {
+                  const saleSubtotal = (selectedSale.items || []).reduce((sum, item) => sum + (Number(item?.total) || 0), 0);
+                  const displaySubtotal = saleSubtotal > 0 ? saleSubtotal : (selectedSale.total_amount + (selectedSale.discount || 0));
+                  const saleTax = Math.max(0, Number((selectedSale.total_amount - (displaySubtotal - (selectedSale.discount || 0))).toFixed(2)));
+                  return (
+                    <>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal</span>
+                        <span className="font-mono font-medium">{formatCurrency(displaySubtotal)}</span>
+                      </div>
+                      {selectedSale.discount > 0 && (
+                        <div className="flex justify-between text-red-600 font-medium">
+                          <span>Discount</span>
+                          <span className="font-mono">-{formatCurrency(selectedSale.discount)}</span>
+                        </div>
+                      )}
+                      {saleTax > 0 && (
+                        <div className="flex justify-between text-slate-600 font-medium">
+                          <span>Tax</span>
+                          <span className="font-mono font-medium">{formatCurrency(saleTax)}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="flex justify-between text-sm font-black text-slate-950 pt-2 border-t border-slate-200">
                   <span>TOTAL AMOUNT</span>
                   <span className="font-mono text-base">{formatCurrency(selectedSale.total_amount)}</span>

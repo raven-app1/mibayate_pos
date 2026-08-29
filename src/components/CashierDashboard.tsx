@@ -16,6 +16,7 @@ import SearchableCategorySelect from './SearchableCategorySelect';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import UiSizeModal from './UiSizeModal';
 import CashierSalesHistory from './CashierSalesHistory';
+import { calculateTax } from '../utils/tax';
 
 interface CashierDashboardProps {
   user: UserProfile;
@@ -32,6 +33,7 @@ interface HeldCart {
   customerName: string;
   items: CartItem[];
   discount: string;
+  applyTax?: boolean;
   createdAt: string;
 }
 
@@ -82,6 +84,13 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const [isSubmittingDeleteRequest, setIsSubmittingDeleteRequest] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState<string>('');
+  const [applyTax, setApplyTax] = useState<boolean>(false);
+
+  const clearCart = () => {
+    setCart([]);
+    setDiscount('');
+    setApplyTax(false);
+  };
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mobile'>('cash');
   const [mobileWallet, setMobileWallet] = useState<MobileWalletType>('kbzpay');
   const [customerName, setCustomerName] = useState('');
@@ -161,11 +170,11 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       customerName: customerName || 'Walk-in Customer',
       items: [...cart],
       discount: discount,
+      applyTax: applyTax,
       createdAt: new Date().toISOString(),
     };
     setHeldCarts(prev => [newHold, ...prev]);
-    setCart([]);
-    setDiscount('');
+    clearCart();
     setCustomerName('');
     setCustomerPhone('');
     setShowCartModal(false);
@@ -175,6 +184,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const handleRecallCart = (held: HeldCart) => {
     setCart(held.items);
     setDiscount(held.discount);
+    setApplyTax(Boolean(held.applyTax));
     setCustomerName(held.customerName === 'Walk-in Customer' ? '' : held.customerName);
     setHeldCarts(prev => prev.filter(c => c.id !== held.id));
     setShowHeldCartsModal(false);
@@ -315,11 +325,17 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     setCart(prev => prev.filter(item => item.product.id !== productId));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discountVal = parseFloat(discount) || 0;
-  const taxRate = businessProfile.tax_rate || 0;
-  const taxAmount = Number(((subtotal - discountVal) * taxRate / 100).toFixed(2));
-  const totalDue = Math.max(0, subtotal - discountVal + taxAmount);
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item?.product?.price) || 0) * (Number(item?.quantity) || 0), 0);
+  const {
+    taxRate,
+    taxAmount,
+    totalDue
+  } = calculateTax({
+    subtotal,
+    discount,
+    taxRate: businessProfile.tax_rate,
+    applyTax
+  });
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -328,11 +344,11 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     setIsCheckingOut(true);
     try {
       const selectedPayment = paymentMethod === 'mobile' ? mobileWallet : 'cash';
-      const sale = await dbService.sales.checkout(cart, selectedPayment, discountVal, user, { name: customerName, phone: customerPhone });
+      const safeDiscount = Math.max(0, parseFloat(discount) || 0);
+      const sale = await dbService.sales.checkout(cart, selectedPayment, safeDiscount, user, { name: customerName, phone: customerPhone }, taxAmount);
       setCompletedSale(sale);
       setShowReceipt(true);
-      setCart([]);
-      setDiscount('');
+      clearCart();
       setCustomerName('');
       setCustomerPhone('');
       setCashReceived('');
@@ -459,7 +475,16 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
               </div>
               {taxRate > 0 && (
                 <div className="flex justify-between items-center text-slate-500">
-                  <span>Tax ({taxRate}%)</span>
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
+                    <input
+                      type="checkbox"
+                      data-testid="tax-checkbox"
+                      checked={applyTax}
+                      onChange={(e) => setApplyTax(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                    />
+                    <span>Tax ({taxRate}%)</span>
+                  </label>
                   <span className="font-mono font-medium">{formatCurrency(taxAmount)}</span>
                 </div>
               )}
@@ -744,7 +769,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                     </button>
                   )}
                   {cart.length > 0 && (
-                    <button onClick={() => setCart([])} className="text-[11px] text-red-600 hover:bg-red-50 px-2.5 py-1 rounded-lg font-bold cursor-pointer">
+                    <button onClick={clearCart} className="text-[11px] text-red-600 hover:bg-red-50 px-2.5 py-1 rounded-lg font-bold cursor-pointer">
                       Clear
                     </button>
                   )}
@@ -866,7 +891,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                   </button>
                 )}
                 {cart.length > 0 && (
-                  <button onClick={() => setCart([])} className="text-[11px] text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl font-bold cursor-pointer">
+                  <button onClick={clearCart} className="text-[11px] text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-xl font-bold cursor-pointer">
                     Clear
                   </button>
                 )}
@@ -902,8 +927,8 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 <p className="text-sm text-slate-400 text-center py-8">No carts on hold.</p>
               ) : (
                 heldCarts.map((held) => {
-                  const heldSubtotal = held.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-                  const heldTotal = Math.max(0, heldSubtotal - (parseFloat(held.discount) || 0));
+                  const heldSubtotal = held.items.reduce((sum, i) => sum + (Number(i?.product?.price) || 0) * (Number(i?.quantity) || 0), 0);
+                  const { totalDue: heldTotal } = calculateTax({ subtotal: heldSubtotal, discount: held.discount, taxRate, applyTax: held.applyTax });
                   return (
                     <div key={held.id} className="android-card p-3.5">
                       <div className="flex items-center justify-between mb-2">
@@ -992,20 +1017,34 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 </div>
 
                 <div className="border-t border-dashed border-slate-300 pt-3 text-[11px] space-y-1.5">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span className="font-mono">{formatCurrency(completedSale.total_amount + completedSale.discount)}</span>
-                  </div>
-                  {completedSale.discount > 0 && (
-                    <div className="flex justify-between text-red-600">
-                      <span>Discount</span>
-                      <span className="font-mono">-{formatCurrency(completedSale.discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-black text-slate-900 text-sm border-t border-dotted border-slate-300 pt-2">
-                    <span>TOTAL</span>
-                    <span className="font-mono text-gray-900">{formatCurrency(completedSale.total_amount)}</span>
-                  </div>
+                  {(() => {
+                    const receiptSubtotal = completedSale.items.reduce((sum, item) => sum + (Number(item?.total) || 0), 0);
+                    const receiptTax = Math.max(0, Number((completedSale.total_amount - (receiptSubtotal - (completedSale.discount || 0))).toFixed(2)));
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Subtotal</span>
+                          <span className="font-mono">{formatCurrency(receiptSubtotal)}</span>
+                        </div>
+                        {completedSale.discount > 0 && (
+                          <div className="flex justify-between text-red-600">
+                            <span>Discount</span>
+                            <span className="font-mono">-{formatCurrency(completedSale.discount)}</span>
+                          </div>
+                        )}
+                        {receiptTax > 0 && (
+                          <div className="flex justify-between text-slate-500">
+                            <span>Tax</span>
+                            <span className="font-mono">{formatCurrency(receiptTax)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-black text-slate-900 text-sm border-t border-dotted border-slate-300 pt-2">
+                          <span>TOTAL</span>
+                          <span className="font-mono text-gray-900">{formatCurrency(completedSale.total_amount)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="border-t border-dashed border-slate-300 pt-3 text-center space-y-2">

@@ -147,8 +147,20 @@ export const QuickRestockModal: React.FC<QuickRestockModalProps> = ({
               <input
                 type="number"
                 min={1}
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 0))}
+                value={quantity || ''}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setQuantity(0);
+                    return;
+                  }
+                  const parsed = parseInt(raw, 10);
+                  setQuantity(isNaN(parsed) ? 0 : Math.max(0, parsed));
+                }}
+                onBlur={() => {
+                  if (quantity < 1) setQuantity(1);
+                }}
                 className="flex-1 text-center py-2.5 font-mono font-extrabold text-lg text-slate-900 text focus:outline-none"
               />
               <button

@@ -1206,7 +1206,8 @@ export const dbService = {
       paymentMethod: Sale['payment_method'],
       discount: number,
       cashier: UserProfile,
-      customer?: { name?: string; phone?: string }
+      customer?: { name?: string; phone?: string },
+      tax: number = 0
     ): Promise<SaleWithItems> {
       if (!supabase) throw new Error('Supabase not configured.');
       if (cart.length === 0) throw new Error('Cannot checkout an empty shopping cart');
@@ -1216,8 +1217,10 @@ export const dbService = {
       const branchId = cashier.branch_id || DEFAULT_BRANCH_ID;
       const branchName = cashier.branch_name || DEFAULT_BRANCH_NAME;
 
-      const rawTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-      const totalAmount = Number(Math.max(0, rawTotal - discount).toFixed(2));
+      const rawTotal = cart.reduce((sum, item) => sum + (Number(item?.product?.price) || 0) * (Number(item?.quantity) || 0), 0);
+      const safeDiscount = Math.max(0, Number(discount) || 0);
+      const safeTax = Math.max(0, Number(tax) || 0);
+      const totalAmount = Number(Math.max(0, rawTotal - safeDiscount + safeTax).toFixed(2));
 
       const newSale: Sale = {
         id: saleId,
@@ -1226,7 +1229,7 @@ export const dbService = {
         branch_id: branchId,
         branch_name: branchName,
         total_amount: totalAmount,
-        discount: discount,
+        discount: safeDiscount,
         payment_method: paymentMethod,
         customer_name: customer?.name || undefined,
         customer_phone: customer?.phone || undefined,
