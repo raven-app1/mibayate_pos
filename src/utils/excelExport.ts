@@ -148,6 +148,90 @@ export function generateSalesReportWorkbook(sales: SaleWithItems[]): XLSX.WorkBo
   return wb;
 }
 
+export interface MonthlyProfitExportData {
+  monthKey: string;
+  monthLabel: string;
+  ordersCount: number;
+  itemsCount: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  marginPercent: number;
+}
+
+export function exportMonthlyProfitToXlsx(
+  months: MonthlyProfitExportData[],
+  rangeLabel: string = 'All Months',
+  filename?: string
+): void {
+  const wb = XLSX.utils.book_new();
+
+  const totalOrders = months.reduce((sum, m) => sum + m.ordersCount, 0);
+  const totalItems = months.reduce((sum, m) => sum + m.itemsCount, 0);
+  const totalRevenue = months.reduce((sum, m) => sum + m.revenue, 0);
+  const totalCost = months.reduce((sum, m) => sum + m.cost, 0);
+  const totalProfit = totalRevenue - totalCost;
+  const overallMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+  const summaryRows: (string | number)[][] = [
+    ['Monthly Profit Report', ''],
+    ['Generated At', new Date().toLocaleString()],
+    ['Selected Period', rangeLabel],
+    ['', ''],
+    ['Metric', 'Value'],
+    ['Total Months', months.length],
+    ['Total Orders', totalOrders],
+    ['Total Items Sold', totalItems],
+    ['Total Revenue (Ks)', totalRevenue],
+    ['Total Cost of Goods (Ks)', totalCost],
+    ['Gross Profit (Ks)', totalProfit],
+    ['Profit Margin (%)', `${overallMargin.toFixed(2)}%`]
+  ];
+
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+  summarySheet['!cols'] = autoFitColumns(summaryRows);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+  const detailHeaders = [
+    'Month',
+    'Orders Count',
+    'Items Sold',
+    'Revenue (Ks)',
+    'Cost (Ks)',
+    'Gross Profit (Ks)',
+    'Margin (%)'
+  ];
+
+  const detailDataRows = months.map((m) => [
+    m.monthLabel,
+    m.ordersCount,
+    m.itemsCount,
+    m.revenue,
+    m.cost,
+    m.profit,
+    `${m.marginPercent.toFixed(2)}%`
+  ]);
+
+  const detailRows = [detailHeaders, ...detailDataRows];
+  const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
+  detailSheet['!cols'] = autoFitColumns(detailRows);
+  XLSX.utils.book_append_sheet(wb, detailSheet, 'Monthly Profit');
+
+  const finalFilename = filename || `monthly_profit_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', finalFilename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export function exportSalesReportToXlsx(sales: SaleWithItems[], filename?: string): void {
   const wb = generateSalesReportWorkbook(sales);
   const finalFilename = filename || `sale_report_${new Date().toISOString().slice(0, 10)}.xlsx`;

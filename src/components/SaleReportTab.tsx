@@ -6,20 +6,23 @@ import { exportSalesReportToXlsx } from '../utils/excelExport';
 import { 
   Receipt, Filter, ChevronDown, ChevronUp, Search, 
   Building2, Users, Calendar, X, RotateCcw, 
-  CreditCard, Wallet, Banknote, User, FileSpreadsheet
+  CreditCard, Wallet, Banknote, User, FileSpreadsheet, TrendingUp
 } from 'lucide-react';
 
 import FilterDrawer from './FilterDrawer';
+import MonthlyProfitView from './dashboard/MonthlyProfitView';
 
 interface SaleReportTabProps {
   sales: SaleWithItems[];
   branches: Branch[];
   cashiers: UserProfile[];
   currency: string;
+  initialView?: 'transactions' | 'monthly-profit';
 }
 
-export default function SaleReportTab({ sales, branches, cashiers, currency }: SaleReportTabProps) {
+export default function SaleReportTab({ sales, branches, cashiers, currency, initialView = 'transactions' }: SaleReportTabProps) {
   const { toast } = useToast();
+  const [activeView, setActiveView] = useState<'transactions' | 'monthly-profit'>(initialView);
   const [isExporting, setIsExporting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter, setDateFilter] = useState<'all' | 'this-month' | 'last-month' | 'custom'>('all');
@@ -111,8 +114,23 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
     return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [sales, dateFilter, startDate, endDate, branchFilter, cashierFilter, searchQuery]);
 
-  const totalAmount = useMemo(() => {
-    return filteredSales.reduce((sum, s) => sum + s.total_amount, 0);
+  const { totalAmount, totalCost, totalProfit, marginPercent } = useMemo(() => {
+    let rev = 0;
+    let cost = 0;
+    filteredSales.forEach(s => {
+      rev += Number(s.total_amount) || 0;
+      (s.items || []).forEach(it => {
+        cost += (Number(it.unit_cost) || 0) * (Number(it.quantity) || 0);
+      });
+    });
+    const prof = rev - cost;
+    const margin = rev > 0 ? (prof / rev) * 100 : 0;
+    return {
+      totalAmount: rev,
+      totalCost: cost,
+      totalProfit: prof,
+      marginPercent: margin
+    };
   }, [filteredSales]);
 
   const toggleExpand = (id: string) => {
@@ -138,47 +156,95 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
             <Receipt className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
-            Sale Report
+            Sale & Profit Report
           </h2>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-xs sm:text-sm text-slate-500">Comprehensive transactions & revenue report</p>
-            <div className="h-4 w-px bg-slate-300"></div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] sm:text-xs font-extrabold text-slate-400 uppercase tracking-wider">Total Sales</span>
-              <span className="text-sm sm:text-base font-black text-black">{formatCurrency(totalAmount)}</span>
-            </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500">Revenue, transaction details and monthly profit analysis</p>
+            {activeView === 'transactions' && (
+              <>
+                <div className="h-4 w-px bg-slate-300 hidden sm:block"></div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] sm:text-xs font-extrabold text-slate-400 uppercase tracking-wider">Total Sales</span>
+                  <span className="text-xs sm:text-sm font-black text-black">{formatCurrency(totalAmount)}</span>
+                </div>
+                <div className="h-4 w-px bg-slate-300"></div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] sm:text-xs font-extrabold text-slate-400 uppercase tracking-wider">Gross Profit</span>
+                  <span className={`text-xs sm:text-sm font-black ${totalProfit < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                    {formatCurrency(totalProfit)} ({marginPercent.toFixed(1)}%)
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={handleExportXlsx}
-            disabled={isExporting || filteredSales.length === 0}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
-            title="Export sales report to Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-slate-600" />
-            <span>{isExporting ? 'Exporting...' : 'Export XLSX'}</span>
-          </button>
+        {activeView === 'transactions' && (
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleExportXlsx}
+              disabled={isExporting || filteredSales.length === 0}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+              title="Export sales report to Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-slate-600" />
+              <span>{isExporting ? 'Exporting...' : 'Export XLSX'}</span>
+            </button>
 
-          <button 
-            onClick={() => setShowFilters(true)}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              activeFilterCount > 0 
-                ? 'bg-black text-white border-black shadow-xs' 
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            <span>Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-white text-black text-[10px] font-black flex items-center justify-center">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-        </div>
+            <button 
+              onClick={() => setShowFilters(true)}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeFilterCount > 0 
+                  ? 'bg-black text-white border-black shadow-xs' 
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-white text-black text-[10px] font-black flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
+
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveView('transactions')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeView === 'transactions'
+              ? 'bg-black text-white shadow-xs'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <Receipt className="w-4 h-4" />
+          <span>Transactions ({sales.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveView('monthly-profit')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeView === 'monthly-profit'
+              ? 'bg-black text-white shadow-xs'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>Monthly Profit & Range</span>
+        </button>
+      </div>
+
+      {activeView === 'monthly-profit' ? (
+        <MonthlyProfitView
+          sales={sales}
+          branches={branches}
+          cashiers={cashiers}
+          currency={currency}
+        />
+      ) : (
+        <>
 
       <FilterDrawer
         isOpen={showFilters}
@@ -309,6 +375,8 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
           const badge = getPaymentBadge(sale.payment_method);
           const BadgeIcon = badge.icon;
           const isExpanded = expandedSaleId === sale.id;
+          const saleCost = (sale.items || []).reduce((sum, it) => sum + ((Number(it.unit_cost) || 0) * (Number(it.quantity) || 0)), 0);
+          const saleProfit = (Number(sale.total_amount) || 0) - saleCost;
 
           return (
             <div key={sale.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
@@ -354,8 +422,13 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
 
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">TOTAL AMOUNT</span>
-                  <span className="text-base font-black text-gray-900">{formatCurrency(sale.total_amount)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-black text-gray-900">{formatCurrency(sale.total_amount)}</span>
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${saleProfit < 0 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-700'}`}>
+                      Profit: {formatCurrency(saleProfit)}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold block mt-0.5">TOTAL SALE & PROFIT</span>
                 </div>
 
                 <button
@@ -396,12 +469,18 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
       </div>
 
       <div className="hidden sm:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
             {filteredSales.length} Transactions Found
           </span>
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-black text-gray-900">Total: {formatCurrency(totalAmount)}</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold text-slate-600">
+              Sales: <strong className="text-gray-900 font-black">{formatCurrency(totalAmount)}</strong>
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-xs font-bold text-slate-600">
+              Profit: <strong className={`font-black ${totalProfit < 0 ? 'text-red-600' : 'text-slate-900'}`}>{formatCurrency(totalProfit)}</strong> ({marginPercent.toFixed(1)}%)
+            </span>
             <button
               onClick={handleExportXlsx}
               disabled={isExporting || filteredSales.length === 0}
@@ -423,7 +502,7 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
                 <th className="py-3 px-4">Branch</th>
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Method</th>
-                <th className="py-3 px-4 text-right">Amount</th>
+                <th className="py-3 px-4 text-right">Amount & Profit</th>
                 <th className="py-3 px-4 text-center">Items</th>
               </tr>
             </thead>
@@ -432,6 +511,8 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
                 const badge = getPaymentBadge(sale.payment_method);
                 const BadgeIcon = badge.icon;
                 const isExpanded = expandedSaleId === sale.id;
+                const saleCost = (sale.items || []).reduce((sum, it) => sum + ((Number(it.unit_cost) || 0) * (Number(it.quantity) || 0)), 0);
+                const saleProfit = (Number(sale.total_amount) || 0) - saleCost;
 
                 return (
                   <React.Fragment key={sale.id}>
@@ -453,8 +534,13 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
                           {badge.label}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right font-black text-gray-900 text-sm">
-                        {formatCurrency(sale.total_amount)}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="font-black text-gray-900 text-sm">
+                          {formatCurrency(sale.total_amount)}
+                        </div>
+                        <div className={`text-[10px] font-bold mt-0.5 ${saleProfit < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                          Profit: {formatCurrency(saleProfit)}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <button
@@ -500,6 +586,8 @@ export default function SaleReportTab({ sales, branches, cashiers, currency }: S
           </table>
         </div>
       </div>
-    </div>
+    </>
+  )}
+</div>
   );
 }

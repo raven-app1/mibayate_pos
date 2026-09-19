@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   DollarSign, TrendingUp, ShoppingCart, AlertTriangle, 
-  Layers, Users 
+  Layers, Users, ArrowRight, Calendar 
 } from 'lucide-react';
 import { 
   ResponsiveContainer, LineChart, CartesianGrid, 
@@ -50,17 +50,19 @@ export default function OverviewTab({
   maxCashierRevenue,
   setActiveTab
 }: OverviewTabProps) {
+  const [profitTimeframe, setProfitTimeframe] = useState<'7d' | '30d' | '6m' | '12m' | 'custom'>('7d');
+  const [customStartMonth, setCustomStartMonth] = useState<string>('');
+  const [customEndMonth, setCustomEndMonth] = useState<string>('');
+
   const analytics = useMemo((): SalesAnalytics => {
     let totalRevenue = 0;
     let totalCost = 0;
     let totalSalesCount = displaySales.length;
 
-    // Sum revenue and cost from actual sales items
     displaySales.forEach(sale => {
-      totalRevenue += sale.total_amount;
-      // Calculate total cost for the items in this sale
-      sale.items.forEach(item => {
-        totalCost += (item.unit_cost * item.quantity);
+      totalRevenue += Number(sale.total_amount) || 0;
+      (sale.items || []).forEach(item => {
+        totalCost += (Number(item.unit_cost) || 0) * (Number(item.quantity) || 0);
       });
     });
 
@@ -70,13 +72,12 @@ export default function OverviewTab({
       return isTracked && (Number(p.stock) || 0) <= (p.min_stock_level ?? 5);
     }).length;
 
-    // Category Sales Distribution
     const categoryMap: { [key: string]: number } = {};
     displaySales.forEach(sale => {
-      sale.items.forEach(item => {
+      (sale.items || []).forEach(item => {
         const prod = products.find(p => p.id === item.product_id);
         const cat = prod?.category || 'Uncategorized';
-        categoryMap[cat] = (categoryMap[cat] || 0) + item.total;
+        categoryMap[cat] = (categoryMap[cat] || 0) + (Number(item.total) || 0);
       });
     });
 
@@ -85,41 +86,96 @@ export default function OverviewTab({
       value: Number(value.toFixed(2))
     })).sort((a, b) => b.value - a.value);
 
-    // Sales over the last 7 days
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split('T')[0];
-    }).reverse();
+    let salesOverTime: Array<{ date: string; revenue: number; profit: number; count: number }> = [];
 
-    const salesMapOverTime: { [key: string]: { revenue: number; profit: number; count: number } } = {};
-    last7Days.forEach(date => {
-      salesMapOverTime[date] = { revenue: 0, profit: 0, count: 0 };
-    });
+    if (profitTimeframe === '7d' || profitTimeframe === '30d') {
+      const daysCount = profitTimeframe === '7d' ? 7 : 30;
+      const daysList = Array.from({ length: daysCount }, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        return d.toISOString().split('T')[0];
+      }).reverse();
 
-    displaySales.forEach(sale => {
-      const dateStr = sale.created_at.split('T')[0];
-      if (salesMapOverTime[dateStr]) {
-        salesMapOverTime[dateStr].revenue += sale.total_amount;
-        salesMapOverTime[dateStr].count += 1;
-        // Cost estimation for profit in daily sales
-        let saleCost = 0;
-        sale.items.forEach(item => {
-          saleCost += (item.unit_cost * item.quantity);
+      const salesMapOverTime: { [key: string]: { revenue: number; profit: number; count: number } } = {};
+      daysList.forEach(date => {
+        salesMapOverTime[date] = { revenue: 0, profit: 0, count: 0 };
+      });
+
+      displaySales.forEach(sale => {
+        const dateStr = sale.created_at ? sale.created_at.split('T')[0] : '';
+        if (salesMapOverTime[dateStr]) {
+          salesMapOverTime[dateStr].revenue += Number(sale.total_amount) || 0;
+          salesMapOverTime[dateStr].count += 1;
+          let saleCost = 0;
+          (sale.items || []).forEach(item => {
+            saleCost += (Number(item.unit_cost) || 0) * (Number(item.quantity) || 0);
+          });
+          salesMapOverTime[dateStr].profit += (Number(sale.total_amount) || 0) - saleCost;
+        }
+      });
+
+      salesOverTime = Object.entries(salesMapOverTime).map(([date, data]) => {
+        const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return {
+          date: formattedDate,
+          revenue: Number(data.revenue.toFixed(2)),
+          profit: Number(data.profit.toFixed(2)),
+          count: data.count
+        };
+      });
+    } else {
+      const now = new Date();
+      const monthsCount = profitTimeframe === '6m' ? 6 : (profitTimeframe === '12m' ? 12 : 0);
+      let monthsKeys: string[] = [];
+
+      if (monthsCount > 0) {
+        for (let i = monthsCount - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          monthsKeys.push(`${y}-${m}`);
+        }
+      } else {
+        const set = new Set<string>();
+        displaySales.forEach(s => {
+          if (s.created_at) set.add(s.created_at.slice(0, 7));
         });
-        salesMapOverTime[dateStr].profit += (sale.total_amount - saleCost);
+        const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        set.add(currentKey);
+        monthsKeys = Array.from(set).sort();
+        if (customStartMonth) monthsKeys = monthsKeys.filter(k => k >= customStartMonth);
+        if (customEndMonth) monthsKeys = monthsKeys.filter(k => k <= customEndMonth);
       }
-    });
 
-    const salesOverTime = Object.entries(salesMapOverTime).map(([date, data]) => {
-      const formattedDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      return {
-        date: formattedDate,
-        revenue: Number(data.revenue.toFixed(2)),
-        profit: Number(data.profit.toFixed(2)),
-        count: data.count
-      };
-    });
+      const salesMapOverTime: { [key: string]: { revenue: number; profit: number; count: number } } = {};
+      monthsKeys.forEach(k => {
+        salesMapOverTime[k] = { revenue: 0, profit: 0, count: 0 };
+      });
+
+      displaySales.forEach(sale => {
+        const mKey = sale.created_at ? sale.created_at.slice(0, 7) : '';
+        if (salesMapOverTime[mKey]) {
+          salesMapOverTime[mKey].revenue += Number(sale.total_amount) || 0;
+          salesMapOverTime[mKey].count += 1;
+          let saleCost = 0;
+          (sale.items || []).forEach(item => {
+            saleCost += (Number(item.unit_cost) || 0) * (Number(item.quantity) || 0);
+          });
+          salesMapOverTime[mKey].profit += (Number(sale.total_amount) || 0) - saleCost;
+        }
+      });
+
+      salesOverTime = Object.entries(salesMapOverTime).map(([mKey, data]) => {
+        const [y, m] = mKey.split('-');
+        const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+        return {
+          date: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+          revenue: Number(data.revenue.toFixed(2)),
+          profit: Number(data.profit.toFixed(2)),
+          count: data.count
+        };
+      });
+    }
 
     // Top Selling Products
     const productSalesMap: { [key: string]: { quantity: number; revenue: number } } = {};
@@ -149,20 +205,28 @@ export default function OverviewTab({
       categorySales,
       topProducts
     };
-  }, [displaySales, displayProducts, products]);
+  }, [displaySales, displayProducts, products, profitTimeframe, customStartMonth, customEndMonth]);
 
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {[
           { label: 'Total Revenue', value: formatCurrency(analytics.totalRevenue), icon: DollarSign, isError: false },
-          { label: 'Gross Profit', value: formatCurrency(analytics.totalProfit), icon: TrendingUp, isError: analytics.totalProfit < 0 },
+          { label: 'Gross Profit', value: formatCurrency(analytics.totalProfit), icon: TrendingUp, isError: analytics.totalProfit < 0, isAction: true },
           { label: 'Sales Transacted', value: `${analytics.totalSalesCount} Orders`, icon: ShoppingCart, isError: false },
           { label: 'Low Stock', value: `${analytics.lowStockCount} Items`, icon: AlertTriangle, isError: analytics.lowStockCount > 0 },
         ].map((card, i) => (
-          <div key={i} className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/80 shadow-premium flex items-center justify-between card-hover">
+          <div 
+            key={i} 
+            onClick={card.isAction ? () => setActiveTab('sale-report') : undefined}
+            className={`bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/80 shadow-premium flex items-center justify-between card-hover ${card.isAction ? 'cursor-pointer hover:border-black/50' : ''}`}
+            title={card.isAction ? 'View detailed monthly profit analysis' : undefined}
+          >
             <div className="min-w-0">
-              <span className="text-slate-400 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold block truncate">{card.label}</span>
+              <span className="text-slate-400 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold block truncate">
+                {card.label}
+                {card.isAction && <span className="ml-1 text-black font-extrabold">→</span>}
+              </span>
               <h3 className={`text-sm sm:text-lg md:text-xl font-extrabold mt-1 truncate ${card.isError ? 'text-red-600' : 'text-slate-900'}`}>
                 {card.value}
               </h3>
@@ -174,14 +238,65 @@ export default function OverviewTab({
         ))}
       </div>
 
-      {/* Charts Area */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Sales & Profit Chart */}
         <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-sm lg:col-span-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <div>
-              <h4 className="font-bold text-sm text-slate-800">Daily Sales & Profit Performance</h4>
-              <p className="text-[10px] text-slate-400">Past 7 days revenue and gross profit trends</p>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="font-bold text-sm text-slate-800">Sales & Gross Profit Performance</h4>
+                <p className="text-[10px] text-slate-400">
+                  {profitTimeframe === '7d' && 'Past 7 days revenue and profit trends'}
+                  {profitTimeframe === '30d' && 'Past 30 days revenue and profit trends'}
+                  {profitTimeframe === '6m' && 'Past 6 months revenue and profit breakdown'}
+                  {profitTimeframe === '12m' && 'Past 12 months revenue and profit breakdown'}
+                  {profitTimeframe === 'custom' && 'Selected months revenue and profit breakdown'}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('sale-report')}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-black transition-colors self-start sm:self-auto cursor-pointer"
+              >
+                <span>Full Profit Analysis</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
+              {(['7d', '30d', '6m', '12m', 'custom'] as const).map(tf => {
+                const label = tf === '7d' ? '7 Days' : tf === '30d' ? '30 Days' : tf === '6m' ? '6 Months' : tf === '12m' ? '12 Months' : 'Custom Range';
+                return (
+                  <button
+                    key={tf}
+                    onClick={() => setProfitTimeframe(tf)}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      profitTimeframe === tf 
+                        ? 'bg-black text-white' 
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+
+              {profitTimeframe === 'custom' && (
+                <div className="flex items-center gap-1.5 ml-auto text-xs">
+                  <input
+                    type="month"
+                    value={customStartMonth}
+                    onChange={(e) => setCustomStartMonth(e.target.value)}
+                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                  />
+                  <span className="text-slate-400 text-xs">to</span>
+                  <input
+                    type="month"
+                    value={customEndMonth}
+                    onChange={(e) => setCustomEndMonth(e.target.value)}
+                    className="px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
