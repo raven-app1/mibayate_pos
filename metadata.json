@@ -1,6 +1,6 @@
 {
   "name": "Retail Shop Management",
   "description": "A comprehensive retail shop management application with separate dashboards for Owners and Cashiers, secure role-based access control, real-time analytics, and Supabase integration.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

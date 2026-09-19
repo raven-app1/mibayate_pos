@@ -21,10 +21,10 @@ const mockUser: UserProfile = {
 };
 
 const mockBranches: Branch[] = [
-  { id: 'b-home', name: 'Home', code: 'HOME' },
-  { id: 'b-mby', name: 'Mby service', code: 'MBYSV' },
-  { id: 'b-m1', name: 'Mibayate 1', code: 'MBY1' },
-  { id: 'b-m2', name: 'Mibayate 2', code: 'MBY2' }
+  { id: 'b-home', name: 'Home', code: 'HOME', address: '', phone: '', is_active: true, created_at: '2026-01-01' },
+  { id: 'b-mby', name: 'Mby service', code: 'MBYSV', address: '', phone: '', is_active: true, created_at: '2026-01-01' },
+  { id: 'b-m1', name: 'Mibayate 1', code: 'MBY1', address: '', phone: '', is_active: true, created_at: '2026-01-01' },
+  { id: 'b-m2', name: 'Mibayate 2', code: 'MBY2', address: '', phone: '', is_active: true, created_at: '2026-01-01' }
 ];
 
 describe('ProductModal Branch Stock Inventory Levels', () => {
