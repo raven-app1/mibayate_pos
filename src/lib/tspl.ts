@@ -4,6 +4,7 @@ import {
   normalizeBarcodeValue,
 } from './escpos';
 import {
+  PositionedRasterImage,
   RasterTextRun,
   canRasterizeText,
   cropRaster,
@@ -134,6 +135,20 @@ function tsplBarcodeType(type: BarcodeType): string {
     CODE93: '93',
   };
   return map[type] || '128';
+}
+
+function invertForTspl(image: PositionedRasterImage): Uint8Array {
+  const data = new Uint8Array(image.data.length);
+  const tailBits = image.widthDots & 7;
+  const paddingMask = tailBits ? 0xff >> tailBits : 0;
+  for (let y = 0; y < image.heightDots; y++) {
+    const row = y * image.widthBytes;
+    for (let b = 0; b < image.widthBytes; b++) {
+      data[row + b] = (~image.data[row + b]) & 0xff;
+    }
+    if (tailBits) data[row + image.widthBytes - 1] |= paddingMask;
+  }
+  return data;
 }
 
 function estimateBarcodeModules(data: string, type: BarcodeType): number {
@@ -351,11 +366,12 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   const image = layer ? cropRaster(layer) : null;
   if (!image) return null;
 
+  const bitmapData = invertForTspl(image);
   const copyCount = Math.max(1, Math.min(Math.floor(copies) || 1, 999));
   const parts: Array<string | Uint8Array> = [
     `${sizeCommands(widthMm, Math.max(5, labelHeightMm), paperMode, labelGapMm).join('\r\n')}\r\n`,
-    `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},1,`,
-    image.data,
+    `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+    bitmapData,
     '\r\n',
   ];
   if (barcodeCommand) parts.push(`${barcodeCommand}\r\n`);
@@ -547,6 +563,7 @@ export function testPrintTspl(
     const layer = renderTextLayer(textRuns, widthDots, heightDots);
     const image = layer ? cropRaster(layer) : null;
     if (image) {
+      const bitmapData = invertForTspl(image);
       return concatParts([
         `SIZE ${fmt(widthMm)} mm,${fmt(heightMm)} mm\r\n`,
         `GAP ${fmt(Math.max(0, labelGapMm))} mm,0 mm\r\n`,
@@ -554,8 +571,8 @@ export function testPrintTspl(
         'REFERENCE 0,0\r\n',
         'DENSITY 8\r\n',
         'CLS\r\n',
-        `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},1,`,
-        image.data,
+        `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+        bitmapData,
         '\r\n',
         `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM)},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"\r\n`,
         'PRINT 1,1\r\n',
