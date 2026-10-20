@@ -13,6 +13,7 @@ import {
   normalizeBarcodeValue, getPrintableMm, testPrint,
 } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
+import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG } from '../lib/labelConfig';
 
 interface LabelGeneratorTabProps {
@@ -397,6 +398,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     setBtProgress({ current: 0, total: printItemsList.length });
 
     try {
+      await ensureLabelFont();
       await new Promise(r => setTimeout(r, 400));
 
       if (config.protocol === 'tspl') {
@@ -437,6 +439,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
+      await ensureLabelFont();
       await printerBridge.send(
         config.protocol === 'tspl'
           ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)

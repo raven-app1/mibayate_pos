@@ -11,6 +11,7 @@ import {
   normalizeBarcodeValue, getPrintableMm, testPrint, BarcodeType,
 } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
+import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
 import { useBackDismiss } from '../lib/backNavigation';
 
@@ -186,6 +187,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     setBtProgress({ current: 0, total: quantity });
 
     try {
+      await ensureLabelFont();
       await new Promise(r => setTimeout(r, 300));
 
       if (config.protocol === 'tspl') {
@@ -219,6 +221,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
+      await ensureLabelFont();
       await printerBridge.send(
         config.protocol === 'tspl'
           ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)

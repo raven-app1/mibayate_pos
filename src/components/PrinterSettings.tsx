@@ -4,8 +4,9 @@ import {
   AlertCircle, Save, X, RefreshCw, Cable, Radio, Info, Smartphone, ChevronDown
 } from 'lucide-react';
 import * as printerBridge from '../lib/printerBridge';
-import { buildLabel, text, separator, feed, cut, init as escInit, setCodePage } from '../lib/escpos';
+import { buildThermalLabel, text, separator, feed, cut, init as escInit, setCodePage, type BarcodeType } from '../lib/escpos';
 import { testPrintTspl } from '../lib/tspl';
+import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
 import { useToast } from '../utils/toast';
 
@@ -134,8 +135,10 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
     setTestingRole(role);
     setBtError(null);
     try {
+      await ensureLabelFont();
+      const cfg = loadLabelConfig(storeName);
+
       if (role === 'barcode' && labelProtocol === 'tspl') {
-        const cfg = loadLabelConfig(storeName);
         await printerBridge.send(testPrintTspl(
           storeName || cfg.storeName || 'My Store',
           parseFloat(cfg.labelWidth) || 50,
@@ -147,12 +150,19 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
         await printerBridge.send(setCodePage('CP437'));
 
         if (role === 'barcode') {
-          await printerBridge.send(buildLabel({
-            storeName: storeName || 'My Store',
+          await printerBridge.send(buildThermalLabel({
+            storeName: storeName || cfg.storeName || 'My Store',
             productName: 'Test Product',
             barcodeValue: '0123456789012',
             price: 25,
             currencySymbol: 'Ks',
+            paperWidthMm: parseFloat(cfg.paperWidth) || 80,
+            labelWidthMm: parseFloat(cfg.labelWidth) || 80,
+            labelHeightMm: parseFloat(cfg.labelHeight) || 30,
+            labelGapMm: parseFloat(cfg.labelGap) || 3,
+            barcodeHeightMm: parseFloat(cfg.barcodeHeight) || 10,
+            barcodeType: cfg.barcodeType as BarcodeType,
+            paperMode: cfg.paperMode,
           }));
         } else {
           const rows = [

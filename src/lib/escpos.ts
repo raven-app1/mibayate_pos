@@ -3,6 +3,14 @@
  * Generates raw byte arrays to send over Bluetooth serial.
  */
 
+import {
+  RasterImage,
+  RasterTextRun,
+  canRasterizeText,
+  hasNonAscii,
+  renderTextBlock,
+} from './labelRaster';
+
 function sanitizeEscPos(str: string): string {
   return (str || '').replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');
 }
@@ -266,6 +274,14 @@ export function rasterBarcode(
 
   // GS v 0 m xL xH yL yH d1...dk (m = 0 normal)
   return concat(new Uint8Array([0x1d, 0x76, 0x30, 0, xL, xH, yL, yH]), bitmap);
+}
+
+export function rasterImage(image: RasterImage): Uint8Array {
+  const xL = image.widthBytes & 0xff;
+  const xH = (image.widthBytes >> 8) & 0xff;
+  const yL = image.heightDots & 0xff;
+  const yH = (image.heightDots >> 8) & 0xff;
+  return concat(new Uint8Array([0x1d, 0x76, 0x30, 0, xL, xH, yL, yH]), image.data);
 }
 
 /** Advance paper exactly past a raster image printed by GS v 0. */
@@ -597,6 +613,260 @@ function estimateBarcodeModules(data: string, type: BarcodeType): number {
   }
 }
 
+function buildBitmapThermalLabel(opts: ThermalLabelOptions): Uint8Array | null {
+  const {
+    storeName = '',
+    productName = '',
+    barcodeValue = '000000',
+    price = 0,
+    showStoreName = true,
+    showProductName = true,
+    showPrice = true,
+    showBarcodeText = true,
+    currencySymbol = 'Ks',
+    paperWidthMm = 58,
+    labelWidthMm = 50,
+    labelHeightMm = 30,
+    barcodeType = 'CODE128',
+    barcodeHeightMm = 10,
+    cutMode = 'off',
+    paperMode = 'sticker',
+    labelGapMm = 3,
+    feedOffsetMm = 0,
+    layout,
+  } = opts;
+
+  if (!canRasterizeText()) return null;
+
+  const hasCustomLayout = !!(layout && (layout.storeName || layout.productName || layout.barcode || layout.price));
+  if (hasCustomLayout) return buildBitmapCustomThermalLabel(opts);
+
+  const printableDots = printableDotsForPaper(paperWidthMm);
+  const labelWidthDots = Math.min(Math.max(Math.round(labelWidthMm * DOTS_PER_MM), 1), printableDots);
+  const labelHeightDots = Math.max(Math.round(labelHeightMm * DOTS_PER_MM), 24);
+  const barcodeHeightDots = Math.max(Math.round(barcodeHeightMm * DOTS_PER_MM), 20);
+  const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
+  const priceValue = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
+  const cmds: Uint8Array[] = [
+    resetFormat(),
+    new Uint8Array([0x1b, 0x61, 0]),
+  ];
+  let usedDots = 0;
+
+  const pushBlock = (run: RasterTextRun) => {
+    const block = renderTextBlock(run);
+    if (!block) return;
+    cmds.push(rasterImage(block.image));
+    cmds.push(feedRaster(block.image.heightDots));
+    usedDots += block.image.heightDots;
+  };
+
+  if (showStoreName && storeName) {
+    pushBlock({
+      text: storeName,
+      xDots: 0,
+      yDots: 0,
+      widthDots: labelWidthDots,
+      px: 24,
+      bold: true,
+      align: 'center',
+      maxLines: 1,
+    });
+  }
+
+  if (showProductName && productName) {
+    const barcodeBlock = barcodeHeightDots + (showBarcodeText ? FONT_A_LINE_DOTS : 0);
+    const priceBlock = showPrice ? 48 : 0;
+    const available = Math.max(labelHeightDots - usedDots - barcodeBlock - priceBlock, FONT_A_LINE_DOTS);
+    pushBlock({
+      text: productName,
+      xDots: 0,
+      yDots: 0,
+      widthDots: labelWidthDots,
+      heightDots: available,
+      px: 20,
+      align: 'center',
+    });
+  }
+
+  if (barcodeType === 'CODE39') {
+    cmds.push(rasterBarcode(barcodeData, barcodeHeightDots, labelWidthDots));
+    cmds.push(feedRaster(barcodeHeightDots));
+    usedDots += barcodeHeightDots;
+    if (showBarcodeText) {
+      cmds.push(text(barcodeData, { align: 'center', bold: false, width: 1, height: 1 }));
+      usedDots += FONT_A_LINE_DOTS;
+    }
+  } else {
+    const moduleWidth = Math.min(Math.max(Math.floor(labelWidthDots / estimateBarcodeModules(barcodeData, barcodeType)), 2), 4);
+    cmds.push(barcode(barcodeData, barcodeType, barcodeHeightDots, showBarcodeText ? 2 : 0, moduleWidth));
+    usedDots += barcodeHeightDots + (showBarcodeText ? FONT_A_LINE_DOTS : 0);
+  }
+
+  if (showPrice) {
+    pushBlock({
+      text: priceValue,
+      xDots: 0,
+      yDots: 0,
+      widthDots: labelWidthDots,
+      heightDots: 48,
+      px: 32,
+      bold: true,
+      align: 'center',
+      maxLines: 1,
+    });
+  }
+
+  if (paperMode === 'sticker') {
+    const pitchDots = Math.max(Math.round((labelHeightMm + labelGapMm + feedOffsetMm) * DOTS_PER_MM), 0);
+    const remainingDots = Math.max(pitchDots - usedDots, 0);
+    const feedLines = Math.floor(remainingDots / FONT_A_LINE_DOTS);
+    const feedRemainder = remainingDots % FONT_A_LINE_DOTS;
+    if (feedLines > 0) cmds.push(feed(feedLines));
+    if (feedRemainder > 0) cmds.push(feedDots(feedRemainder));
+  } else {
+    const remainingDots = Math.max(labelHeightDots - usedDots, 0);
+    const feedLines = Math.floor(remainingDots / FONT_A_LINE_DOTS);
+    const feedRemainder = remainingDots % FONT_A_LINE_DOTS;
+    if (feedLines > 0) cmds.push(feed(feedLines));
+    if (feedRemainder > 0) cmds.push(feedDots(feedRemainder));
+    if (cutMode === 'partial') cmds.push(partialCut());
+    else if (cutMode === 'full') cmds.push(cut());
+  }
+
+  return concat(...cmds);
+}
+
+function buildBitmapCustomThermalLabel(opts: ThermalLabelOptions): Uint8Array | null {
+  const {
+    storeName = '',
+    productName = '',
+    barcodeValue = '000000',
+    price = 0,
+    showStoreName = true,
+    showProductName = true,
+    showPrice = true,
+    showBarcodeText = true,
+    currencySymbol = 'Ks',
+    paperWidthMm = 58,
+    labelWidthMm = 50,
+    labelHeightMm = 30,
+    barcodeType = 'CODE128',
+    barcodeHeightMm = 10,
+    paperMode = 'sticker',
+    labelGapMm = 3,
+    feedOffsetMm = 0,
+    layout,
+  } = opts;
+
+  if (!layout) return null;
+
+  const printableMm = getPrintableMm(paperWidthMm);
+  const effLabelWidthMm = Math.min(labelWidthMm, printableMm);
+  const labelHeightDots = Math.max(Math.round(labelHeightMm * DOTS_PER_MM), 24);
+  const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
+  const priceValue = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
+  const cmds: Uint8Array[] = [
+    resetFormat(),
+    new Uint8Array([0x1b, 0x61, 0]),
+  ];
+
+  interface CustomElement {
+    yDots: number;
+    heightDots: number;
+    emit: () => Uint8Array;
+  }
+  const els: CustomElement[] = [];
+
+  const pushText = (text: string, position: LabelPosition, px: number, bold: boolean) => {
+    const availableWidth = Math.max(mmToDots(position.widthMm ?? (effLabelWidthMm - position.xMm)), mmToDots(4));
+    const availableHeight = position.heightMm
+      ? mmToDots(position.heightMm)
+      : Math.max(labelHeightDots - mmToDots(position.yMm), FONT_A_LINE_DOTS);
+    const block = renderTextBlock({
+      text,
+      xDots: 0,
+      yDots: 0,
+      widthDots: availableWidth,
+      heightDots: availableHeight,
+      px,
+      bold,
+      align: 'left',
+    });
+    if (!block) return;
+    els.push({
+      yDots: mmToDots(position.yMm),
+      heightDots: block.image.heightDots,
+      emit: () => concat(
+        setAbsoluteX(mmToDots(position.xMm)),
+        rasterImage(block.image),
+        feedRaster(block.image.heightDots),
+      ),
+    });
+  };
+
+  if (showStoreName && storeName && layout.storeName) {
+    pushText(storeName, layout.storeName, 24 * (layout.storeName.size ?? 1), true);
+  }
+  if (showProductName && productName && layout.productName) {
+    pushText(productName, layout.productName, 20 * (layout.productName.size ?? 1), false);
+  }
+  if (showPrice && priceValue && layout.price) {
+    pushText(priceValue, layout.price, 32 * (layout.price.size ?? 1), true);
+  }
+
+  if (layout.barcode) {
+    const position = layout.barcode;
+    const maxWidthMm = position.widthMm
+      ? Math.min(position.widthMm, effLabelWidthMm - position.xMm)
+      : effLabelWidthMm - position.xMm;
+    const maxWidthDots = Math.max(mmToDots(maxWidthMm), mmToDots(8));
+    const heightMm = position.heightMm
+      ? Math.min(position.heightMm, labelHeightMm - position.yMm)
+      : barcodeHeightMm;
+    const heightDots = Math.max(Math.round(heightMm * DOTS_PER_MM), 20);
+    const parts: Uint8Array[] = [];
+
+    if (barcodeType === 'CODE39') {
+      parts.push(setAbsoluteX(mmToDots(position.xMm)));
+      parts.push(rasterBarcode(barcodeData, heightDots, maxWidthDots));
+      parts.push(feedRaster(heightDots));
+      if (showBarcodeText) {
+        parts.push(absoluteTextLines([barcodeData], mmToDots(position.xMm), 1, false));
+      }
+    } else {
+      const moduleWidth = Math.min(Math.max(Math.floor(maxWidthDots / estimateBarcodeModules(barcodeData, barcodeType)), 2), 4);
+      parts.push(setAbsoluteX(mmToDots(position.xMm)));
+      parts.push(barcode(barcodeData, barcodeType, heightDots, showBarcodeText ? 2 : 0, moduleWidth));
+    }
+
+    els.push({
+      yDots: mmToDots(position.yMm),
+      heightDots: heightDots + (showBarcodeText ? FONT_A_LINE_DOTS : 0),
+      emit: () => concat(...parts),
+    });
+  }
+
+  let cursorY = 0;
+  for (const el of els.sort((a, b) => a.yDots - b.yDots)) {
+    if (el.yDots > cursorY) cmds.push(feedDots(el.yDots - cursorY));
+    else if (el.yDots < cursorY) cmds.push(feedDots(1));
+    cmds.push(el.emit());
+    cursorY = el.yDots + el.heightDots;
+  }
+
+  const targetDots = paperMode === 'sticker'
+    ? Math.max(Math.round((labelHeightMm + labelGapMm + feedOffsetMm) * DOTS_PER_MM), 0)
+    : labelHeightDots;
+  const remainingDots = Math.max(targetDots - cursorY, 0);
+  const feedLines = Math.floor(remainingDots / FONT_A_LINE_DOTS);
+  const feedRemainder = remainingDots % FONT_A_LINE_DOTS;
+  if (feedLines > 0) cmds.push(feed(feedLines));
+  if (feedRemainder > 0) cmds.push(feedDots(feedRemainder));
+
+  return concat(...cmds);
+}
+
 /**
  * Build a complete ESC/POS sequence for ONE self-adhesive thermal label sized
  * in millimetres. Computes the printable character grid from the requested
@@ -624,6 +894,18 @@ export function buildThermalLabel(opts: ThermalLabelOptions): Uint8Array {
     labelGapMm = 3,
     feedOffsetMm = 0,
   } = opts;
+
+  const visiblePrice = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
+  const visibleText = [
+    showStoreName ? storeName : '',
+    showProductName ? productName : '',
+    showPrice ? visiblePrice : '',
+  ].join(' ');
+
+  if (canRasterizeText() && hasNonAscii(visibleText)) {
+    const rasterLabel = buildBitmapThermalLabel(opts);
+    if (rasterLabel) return rasterLabel;
+  }
 
   const isSticker = paperMode === 'sticker';
   const printableDots = printableDotsForPaper(paperWidthMm);
@@ -779,7 +1061,7 @@ function buildCustomThermalLabel(opts: ThermalLabelOptions): Uint8Array {
   const els: CustomEl[] = [];
 
   const wrapChars = (xMm: number, size: 1 | 2, widthMm?: number) => {
-    const availDots = Math.max(mmToDots((widthMm ?? effLabelWidthMm) - xMm), mmToDots(4));
+    const availDots = Math.max(mmToDots(widthMm ?? (effLabelWidthMm - xMm)), mmToDots(4));
     return Math.max(Math.floor(availDots / (FONT_A_CHAR_DOTS * size)), 1);
   };
 
