@@ -31,6 +31,99 @@ const FONT_FAMILY = 'MiBayate Myanmar Print';
 const FONT_STACK = `"${FONT_FAMILY}", "Noto Sans Myanmar", "Myanmar Text", "Padauk", sans-serif`;
 const LINE_RATIO = 1.6;
 
+const SUPPORTED_RANGES: Array<[number, number]> = [
+  [0x20, 0x7e],
+  [0xa0, 0xa3],
+  [0xa5, 0xa5],
+  [0xa7, 0xab],
+  [0xae, 0xb0],
+  [0xb4, 0xb4],
+  [0xb6, 0xb8],
+  [0xba, 0xbb],
+  [0xbf, 0x107],
+  [0x10a, 0x113],
+  [0x116, 0x11b],
+  [0x11e, 0x123],
+  [0x126, 0x127],
+  [0x12a, 0x12b],
+  [0x12e, 0x133],
+  [0x136, 0x137],
+  [0x139, 0x13e],
+  [0x141, 0x148],
+  [0x14a, 0x14d],
+  [0x150, 0x15b],
+  [0x15e, 0x161],
+  [0x164, 0x165],
+  [0x16a, 0x17e],
+  [0x1cd, 0x1ce],
+  [0x218, 0x21b],
+  [0x237, 0x237],
+  [0x2c6, 0x2c7],
+  [0x2c9, 0x2c9],
+  [0x2d8, 0x2dd],
+  [0x300, 0x304],
+  [0x306, 0x308],
+  [0x30a, 0x30c],
+  [0x312, 0x312],
+  [0x326, 0x328],
+  [0x1000, 0x109f],
+  [0x1e80, 0x1e85],
+  [0x1e9e, 0x1e9e],
+  [0x1ef2, 0x1ef3],
+  [0x200b, 0x200d],
+  [0x2013, 0x2014],
+  [0x2018, 0x201a],
+  [0x201c, 0x201e],
+  [0x2022, 0x2022],
+  [0x2026, 0x2026],
+  [0x2039, 0x203a],
+  [0x20ac, 0x20ac],
+  [0x2122, 0x2122],
+  [0x2212, 0x2212],
+  [0x25cc, 0x25cc],
+  [0xa92e, 0xa92e],
+  [0xa9e0, 0xa9fe],
+  [0xaa60, 0xaa7f],
+  [0xfe00, 0xfe00],
+];
+
+const SYMBOL_REPLACEMENTS: Record<string, string> = {
+  '\u00b1': '+/-',
+  '\u00b5': 'u',
+  '\u00bc': '1/4',
+  '\u00bd': '1/2',
+  '\u00be': '3/4',
+  '\u00d7': 'x',
+  '\u00f7': '/',
+  '\u2010': '-',
+  '\u2011': '-',
+  '\u2012': '-',
+  '\u2015': '-',
+  '\u2030': '%',
+  '\u2032': "'",
+  '\u2033': '"',
+  '\u2044': '/',
+  '\u20b9': 'INR',
+  '\u0e3f': 'THB',
+  '\u20a9': 'KRW',
+  '\u20bd': 'RUB',
+  '\u2190': '<-',
+  '\u2192': '->',
+  '\u2191': '^',
+  '\u2193': 'v',
+  '\u221e': 'inf',
+  '\u2260': '!=',
+  '\u2264': '<=',
+  '\u2265': '>=',
+  '\u25a0': '#',
+  '\u25cf': '*',
+  '\u2605': '*',
+  '\u2606': '*',
+  '\u2713': 'v',
+  '\u2714': 'v',
+  '\u26a0': '!',
+};
+
 let fontPromise: Promise<void> | null = null;
 let measureCanvas: HTMLCanvasElement | null = null;
 
@@ -50,13 +143,20 @@ export function ensureLabelFont(): Promise<void> {
     fontPromise = (async () => {
       const base = document.baseURI || `${window.location.origin}/`;
       const href = new URL('fonts/NotoSansMyanmar.woff2', base).href;
-      const face = new FontFace(
+      const regular = new FontFace(
         FONT_FAMILY,
         `url("${href}") format("woff2")`,
-        { weight: '100 900', style: 'normal' },
+        { weight: '400', style: 'normal' },
       );
-      await face.load();
-      document.fonts.add(face);
+      await regular.load();
+      document.fonts.add(regular);
+      const bold = new FontFace(
+        FONT_FAMILY,
+        `url("${href}") format("woff2")`,
+        { weight: '700', style: 'normal' },
+      );
+      await bold.load();
+      document.fonts.add(bold);
       await document.fonts.load(`400 24px "${FONT_FAMILY}"`, '\u1019\u103C\u1014\u103A\u1019\u102C');
       await document.fonts.load(`700 24px "${FONT_FAMILY}"`, '\u1019\u103C\u1014\u103A\u1019\u102C');
     })().catch(() => {
@@ -65,7 +165,7 @@ export function ensureLabelFont(): Promise<void> {
   }
   return Promise.race([
     fontPromise,
-    new Promise<void>(resolve => setTimeout(resolve, 2500)),
+    new Promise<void>(resolve => setTimeout(resolve, 15000)),
   ]);
 }
 
@@ -96,6 +196,23 @@ interface TextLayout {
   lines: string[];
 }
 
+function isSupportedCodePoint(code: number): boolean {
+  return SUPPORTED_RANGES.some(([start, end]) => code >= start && code <= end);
+}
+
+function sanitizePrintableText(value: string): string {
+  let result = '';
+  for (const char of Array.from(value || '')) {
+    const code = char.codePointAt(0) ?? 0;
+    if (isSupportedCodePoint(code)) {
+      result += char;
+    } else {
+      result += SYMBOL_REPLACEMENTS[char] || '';
+    }
+  }
+  return result;
+}
+
 function layoutText(ctx: CanvasRenderingContext2D, run: RasterTextRun): TextLayout {
   const singleLine = run.maxLines === 1;
   let px = Math.max(9, Math.round(run.px));
@@ -113,7 +230,7 @@ function layoutText(ctx: CanvasRenderingContext2D, run: RasterTextRun): TextLayo
 
   ctx.font = font;
   const maxWidth = Math.max(8, run.widthDots - 4);
-  const normalized = (run.text || '')
+  const normalized = sanitizePrintableText(run.text)
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
