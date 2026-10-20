@@ -2,6 +2,7 @@ import { LabelConfig } from '../types';
 
 export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   paperMode: 'sticker',
+  protocol: 'escpos',
   paperWidth: '80',
   labelWidth: '80',
   labelHeight: '30',
@@ -40,6 +41,7 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
       return {
         ...DEFAULT_LABEL_CONFIG,
         ...parsed,
+        protocol: parsed.protocol === 'tspl' ? 'tspl' : 'escpos',
         storeName: parsed.storeName || defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
         layoutXY: {
           ...DEFAULT_LABEL_CONFIG.layoutXY,

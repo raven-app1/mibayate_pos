@@ -12,6 +12,7 @@ import {
   buildThermalLabel, init as escInit, setCodePage, feedPitch,
   normalizeBarcodeValue, getPrintableMm, testPrint,
 } from '../lib/escpos';
+import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG } from '../lib/labelConfig';
 
 interface LabelGeneratorTabProps {
@@ -397,15 +398,27 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
     try {
       await new Promise(r => setTimeout(r, 400));
-      await printerBridge.send(escInit());
-      await printerBridge.send(setCodePage('CP437'));
 
-      for (let i = 0; i < printItemsList.length; i++) {
-        const item = printItemsList[i];
-        await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
-        setBtProgress({ current: i + 1, total: printItemsList.length });
-        if (i < printItemsList.length - 1) {
-          await new Promise(r => setTimeout(r, 150));
+      if (config.protocol === 'tspl') {
+        for (let i = 0; i < printItemsList.length; i++) {
+          const item = printItemsList[i];
+          await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
+          setBtProgress({ current: i + 1, total: printItemsList.length });
+          if (i < printItemsList.length - 1) {
+            await new Promise(r => setTimeout(r, 150));
+          }
+        }
+      } else {
+        await printerBridge.send(escInit());
+        await printerBridge.send(setCodePage('CP437'));
+
+        for (let i = 0; i < printItemsList.length; i++) {
+          const item = printItemsList[i];
+          await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
+          setBtProgress({ current: i + 1, total: printItemsList.length });
+          if (i < printItemsList.length - 1) {
+            await new Promise(r => setTimeout(r, 150));
+          }
         }
       }
     } catch (err: any) {
@@ -418,27 +431,35 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       setBtPrinting(false);
       setBtProgress({ current: 0, total: 0 });
     }
-  }, [printItemsList, labelOptionsFor, btPrinting]);
+  }, [printItemsList, labelOptionsFor, btPrinting, config.protocol]);
 
   const handleTestPrint = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(testPrint());
+      await printerBridge.send(
+        config.protocol === 'tspl'
+          ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
+          : testPrint()
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
     }
-  }, [btPrinting]);
+  }, [btPrinting, config.protocol, config.storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
 
   const handleFeedAlign = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(feedPitch(effLabelHeight, effLabelGap, effFeedOffset));
+      await printerBridge.send(
+        config.protocol === 'tspl'
+          ? feedTspl()
+          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
-  }, [btPrinting, effLabelHeight, effLabelGap, effFeedOffset]);
+  }, [btPrinting, config.protocol, effLabelHeight, effLabelGap, effFeedOffset]);
 
   const filteredProducts = products.filter(p => {
     if (!p) return false;
@@ -910,6 +931,29 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                     <Ruler className="w-3.5 h-3.5 text-slate-600" />
                     <span>Feed & Align Sticker</span>
                   </button>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                    Printer Language
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateConfig(p => ({ ...p, protocol: 'escpos' }))}
+                      className={segBtn(config.protocol === 'escpos')}
+                    >
+                      ESC/POS (Receipt)
+                    </button>
+                    <button
+                      onClick={() => updateConfig(p => ({ ...p, protocol: 'tspl' }))}
+                      className={segBtn(config.protocol === 'tspl')}
+                    >
+                      TSPL (Label)
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
+                    Set the printer itself to Label mode when using TSPL, or Receipt/ESC-POS mode when using ESC/POS. Blank paper usually means these two do not match.
+                  </p>
                 </div>
               </div>
             ) : (

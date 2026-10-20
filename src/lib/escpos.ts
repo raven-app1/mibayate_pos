@@ -316,9 +316,14 @@ export function feed(n: number = 3): Uint8Array {
 
 /** Feed paper by n dot lines */
 export function feedDots(n: number): Uint8Array {
-  const high = (n >> 8) & 0xff;
-  const low = n & 0xff;
-  return new Uint8Array([0x1b, 0x4a, low, high]); // ESC J nL nH
+  const bytes: number[] = [];
+  let remaining = Math.max(0, Math.floor(n));
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, 255);
+    bytes.push(0x1b, 0x4a, chunk);
+    remaining -= chunk;
+  }
+  return new Uint8Array(bytes);
 }
 
 /** Cut paper (full cut) */
@@ -496,6 +501,10 @@ export interface LabelPosition {
   xMm: number;
   /** mm from the top edge of the label. */
   yMm: number;
+  /** Available width in mm for wrapping (optional). */
+  widthMm?: number;
+  /** Available height in mm for wrapping (optional). */
+  heightMm?: number;
   /** Text scale: 1 = normal, 2 = double size. */
   size?: 1 | 2;
 }

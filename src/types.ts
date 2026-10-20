@@ -171,6 +171,7 @@ export interface SalesAnalytics {
 
 export interface LabelConfig {
   paperMode: 'sticker' | 'receipt';
+  protocol: 'escpos' | 'tspl';
   paperWidth: string;
   labelWidth: string;
   labelHeight: string;

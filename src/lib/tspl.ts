@@ -1,0 +1,306 @@
+import {
+  BarcodeType,
+  ThermalLabelOptions,
+  normalizeBarcodeValue,
+} from './escpos';
+
+export interface TsplLabelOptions extends ThermalLabelOptions {
+  copies?: number;
+  dotsPerMm?: number;
+}
+
+const DEFAULT_DOTS_PER_MM = 8;
+
+const FONT_WIDTH: Record<string, number> = {
+  '1': 8,
+  '2': 12,
+  '3': 16,
+  '4': 24,
+  '5': 32,
+};
+
+const FONT_HEIGHT: Record<string, number> = {
+  '1': 12,
+  '2': 20,
+  '3': 24,
+  '4': 32,
+  '5': 48,
+};
+
+function encode(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+function fmt(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function dots(mm: number, dotsPerMm: number): number {
+  return Math.max(0, Math.round(mm * dotsPerMm));
+}
+
+function sanitize(value: string): string {
+  return (value || '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/"/g, "'")
+    .replace(/[^\x20-\x7E]/g, '?')
+    .trim();
+}
+
+function wrapText(value: string, maxChars: number): string[] {
+  const text = sanitize(value);
+  if (!text) return [];
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    if (word.length > maxChars) {
+      if (current) {
+        lines.push(current);
+        current = '';
+      }
+      let rest = word;
+      while (rest.length > maxChars) {
+        lines.push(rest.slice(0, maxChars));
+        rest = rest.slice(maxChars);
+      }
+      current = rest;
+      continue;
+    }
+
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
+function truncate(value: string, maxChars: number): string {
+  const text = sanitize(value);
+  if (text.length <= maxChars) return text;
+  return text.slice(0, Math.max(0, maxChars - 3)).trimEnd() + '...';
+}
+
+function textCommand(
+  x: number,
+  y: number,
+  font: string,
+  size: number,
+  value: string,
+): string {
+  return `TEXT ${x},${y},"${font}",0,${size},${size},"${sanitize(value)}"`;
+}
+
+function tsplBarcodeType(type: BarcodeType): string {
+  const map: Record<BarcodeType, string> = {
+    CODE39: '39',
+    CODE128: '128',
+    EAN13: 'EAN13',
+    EAN8: 'EAN8',
+    UPCA: 'UPCA',
+    UPCE: 'UPCE',
+    ITF: 'ITF',
+    CODE93: '93',
+  };
+  return map[type] || '128';
+}
+
+function estimateBarcodeModules(data: string, type: BarcodeType): number {
+  const n = data.length;
+  switch (type) {
+    case 'CODE128': return (n + 2) * 11 + 20;
+    case 'CODE39': return n * 16 + 20;
+    case 'CODE93': return (n + 2) * 9 + 20;
+    case 'ITF': return Math.ceil(n / 2) * 18 + 20;
+    case 'EAN13': return 95 + 20;
+    case 'EAN8': return 67 + 20;
+    case 'UPCA': return 95 + 20;
+    case 'UPCE': return 51 + 20;
+    default: return (n + 2) * 11 + 20;
+  }
+}
+
+function sizeCommands(
+  labelWidthMm: number,
+  labelHeightMm: number,
+  paperMode: 'receipt' | 'sticker',
+  labelGapMm: number,
+): string[] {
+  return [
+    `SIZE ${fmt(labelWidthMm)} mm,${fmt(labelHeightMm)} mm`,
+    paperMode === 'sticker'
+      ? `GAP ${fmt(labelGapMm)} mm,0 mm`
+      : 'GAP 0 mm,0 mm',
+    'DIRECTION 0',
+    'REFERENCE 0,0',
+    'DENSITY 8',
+    'CLS',
+  ];
+}
+
+export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
+  const {
+    storeName = '',
+    productName = '',
+    barcodeValue = '000000',
+    price = 0,
+    showStoreName = true,
+    showProductName = true,
+    showPrice = true,
+    showBarcodeText = true,
+    currencySymbol = 'Ks',
+    paperWidthMm = 58,
+    labelWidthMm = 50,
+    labelHeightMm = 30,
+    barcodeType = 'CODE128',
+    barcodeHeightMm = 10,
+    paperMode = 'sticker',
+    labelGapMm = 3,
+    layout,
+    copies = 1,
+    dotsPerMm = DEFAULT_DOTS_PER_MM,
+  } = opts;
+
+  const widthMm = Math.max(5, Math.min(labelWidthMm, paperWidthMm));
+  const heightMm = Math.max(5, labelHeightMm);
+  const commands = sizeCommands(widthMm, heightMm, paperMode, labelGapMm);
+
+  const storePos = layout?.storeName;
+  const productPos = layout?.productName;
+  const barcodePos = layout?.barcode;
+  const pricePos = layout?.price;
+  const hasLayout = !!(storePos || productPos || barcodePos || pricePos);
+
+  const barcodeHeightDots = Math.max(dots(barcodeHeightMm, dotsPerMm), 20);
+  const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
+  const barcodeModules = estimateBarcodeModules(barcodeData, barcodeType);
+
+  if (hasLayout) {
+    if (showStoreName && storeName && storePos) {
+      const size = storePos.size ?? 1;
+      const x = dots(storePos.xMm, dotsPerMm);
+      const y = dots(storePos.yMm, dotsPerMm);
+      const available = Math.max(dots(storePos.widthMm ?? widthMm - storePos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
+      commands.push(textCommand(x, y, '3', size, truncate(storeName, maxChars)));
+    }
+
+    if (showProductName && productName && productPos) {
+      const size = productPos.size ?? 1;
+      const x = dots(productPos.xMm, dotsPerMm);
+      const y = dots(productPos.yMm, dotsPerMm);
+      const available = Math.max(dots(productPos.widthMm ?? widthMm - productPos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['2'] * size)));
+      const lineHeight = FONT_HEIGHT['2'] * size;
+      const availableHeight = productPos.heightMm
+        ? Math.max(dots(productPos.heightMm, dotsPerMm), lineHeight)
+        : lineHeight;
+      const maxLines = Math.max(1, Math.floor(availableHeight / lineHeight));
+      const lines = wrapText(productName, maxChars).slice(0, maxLines);
+      lines.forEach((line, index) => {
+        commands.push(textCommand(x, y + index * lineHeight, '2', size, line));
+      });
+    }
+
+    if (barcodePos) {
+      const x = dots(barcodePos.xMm, dotsPerMm);
+      const y = dots(barcodePos.yMm, dotsPerMm);
+      const available = Math.max(dots(barcodePos.widthMm ?? widthMm - barcodePos.xMm, dotsPerMm), 40);
+      const height = barcodePos.heightMm
+        ? Math.max(dots(barcodePos.heightMm, dotsPerMm), 20)
+        : barcodeHeightDots;
+      const narrow = Math.min(Math.max(Math.floor(available / barcodeModules), 1), 4);
+      const wide = Math.min(narrow * 2, 10);
+      commands.push(
+        `BARCODE ${x},${y},"${tsplBarcodeType(barcodeType)}",${height},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`
+      );
+    }
+
+    if (showPrice && pricePos) {
+      const size = pricePos.size ?? 1;
+      const x = dots(pricePos.xMm, dotsPerMm);
+      const y = dots(pricePos.yMm, dotsPerMm);
+      const available = Math.max(dots(pricePos.widthMm ?? widthMm - pricePos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
+      const priceText = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
+      commands.push(textCommand(x, y, '3', size, truncate(priceText, maxChars)));
+    }
+  } else {
+    let cursorY = dots(1, dotsPerMm);
+
+    if (showStoreName && storeName) {
+      const maxChars = Math.max(1, Math.floor(dots(widthMm - 2, dotsPerMm) / FONT_WIDTH['3']));
+      commands.push(textCommand(dots(1, dotsPerMm), cursorY, '3', 1, truncate(storeName, maxChars)));
+      cursorY += FONT_HEIGHT['3'] + 8;
+    }
+
+    if (showProductName && productName) {
+      const maxChars = Math.max(1, Math.floor(dots(widthMm - 2, dotsPerMm) / FONT_WIDTH['2']));
+      const lineHeight = FONT_HEIGHT['2'];
+      const lines = wrapText(productName, maxChars);
+      lines.forEach((line, index) => {
+        commands.push(textCommand(dots(1, dotsPerMm), cursorY + index * lineHeight, '2', 1, line));
+      });
+      cursorY += lines.length * lineHeight;
+    }
+
+    cursorY += 8;
+    const available = Math.max(dots(widthMm - 2, dotsPerMm), 40);
+    const narrow = Math.min(Math.max(Math.floor(available / barcodeModules), 1), 4);
+    const wide = Math.min(narrow * 2, 10);
+    commands.push(
+      `BARCODE ${dots(1, dotsPerMm)},${cursorY},"${tsplBarcodeType(barcodeType)}",${barcodeHeightDots},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`
+    );
+    cursorY += barcodeHeightDots + (showBarcodeText ? FONT_HEIGHT['1'] + 4 : 0);
+
+    if (showPrice) {
+      const maxChars = Math.max(1, Math.floor(dots(widthMm - 2, dotsPerMm) / FONT_WIDTH['3']));
+      const priceText = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
+      commands.push(textCommand(dots(1, dotsPerMm), cursorY + 8, '3', 1, truncate(priceText, maxChars)));
+    }
+  }
+
+  const copyCount = Math.max(1, Math.min(Math.floor(copies) || 1, 999));
+  commands.push(`PRINT 1,${copyCount}`);
+
+  return encode(commands.join('\r\n') + '\r\n');
+}
+
+export function testPrintTspl(
+  storeName: string,
+  labelWidthMm = 50,
+  labelHeightMm = 30,
+  labelGapMm = 3,
+): Uint8Array {
+  const widthMm = Math.max(5, labelWidthMm);
+  const heightMm = Math.max(5, labelHeightMm);
+  const maxChars = Math.max(1, Math.floor(dots(widthMm - 4, DEFAULT_DOTS_PER_MM) / FONT_WIDTH['3']));
+  const store = truncate(storeName || 'My Store', maxChars);
+
+  const commands = [
+    `SIZE ${fmt(widthMm)} mm,${fmt(heightMm)} mm`,
+    `GAP ${fmt(Math.max(0, labelGapMm))} mm,0 mm`,
+    'DIRECTION 0',
+    'REFERENCE 0,0',
+    'DENSITY 8',
+    'CLS',
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(2, DEFAULT_DOTS_PER_MM), '3', 1, store),
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(7, DEFAULT_DOTS_PER_MM), '2', 1, 'MiBayate Printer Test'),
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(11, DEFAULT_DOTS_PER_MM), '2', 1, 'TSPL label mode works.'),
+    `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM)},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"`,
+    'PRINT 1,1',
+  ];
+
+  return encode(commands.join('\r\n') + '\r\n');
+}
+
+export function feedTspl(): Uint8Array {
+  return encode('FORMFEED\r\n');
+}

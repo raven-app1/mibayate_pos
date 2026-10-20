@@ -204,27 +204,25 @@ export async function send(data: Uint8Array): Promise<void> {
 
   const characteristic = state.characteristic;
 
-  // Determine max write length
-  // BLE has MTU limit; most ESC/POS Bluetooth printers accept 20 bytes at a time
-  // Some support longer writes via writeWithoutResponse
-  const supportsWriteWithoutResponse = characteristic.properties.writeWithoutResponse;
-  const maxChunkSize = 20; // Safe default for BLE
+  // Prefer acknowledged writes so the printer can apply backpressure. Falls
+  // back to unacknowledged writes for characteristics that only support those.
+  const useWithResponse = characteristic.properties.write;
+  const maxChunkSize = 20;
 
   let offset = 0;
   while (offset < data.length) {
     const chunk = data.slice(offset, offset + maxChunkSize);
 
-    if (supportsWriteWithoutResponse) {
-      await characteristic.writeValueWithoutResponse(chunk);
-    } else {
+    if (useWithResponse) {
       await characteristic.writeValueWithResponse(chunk);
+    } else {
+      await characteristic.writeValueWithoutResponse(chunk);
     }
 
     offset += maxChunkSize;
 
-    // Small delay between chunks to avoid overwhelming the printer
     if (offset < data.length) {
-      await sleep(10);
+      await sleep(useWithResponse ? 5 : 25);
     }
   }
 }
@@ -241,24 +239,24 @@ export async function sendWithProgress(
   }
 
   const characteristic = state.characteristic;
-  const supportsWriteWithoutResponse = characteristic.properties.writeWithoutResponse;
+  const useWithResponse = characteristic.properties.write;
   const maxChunkSize = 20;
 
   let offset = 0;
   while (offset < data.length) {
     const chunk = data.slice(offset, offset + maxChunkSize);
 
-    if (supportsWriteWithoutResponse) {
-      await characteristic.writeValueWithoutResponse(chunk);
-    } else {
+    if (useWithResponse) {
       await characteristic.writeValueWithResponse(chunk);
+    } else {
+      await characteristic.writeValueWithoutResponse(chunk);
     }
 
     offset += maxChunkSize;
     onProgress?.(Math.min(offset, data.length), data.length);
 
     if (offset < data.length) {
-      await sleep(10);
+      await sleep(useWithResponse ? 5 : 25);
     }
   }
 }

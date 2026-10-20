@@ -10,7 +10,8 @@ import {
   buildThermalLabel, init as escInit, setCodePage, feedPitch,
   normalizeBarcodeValue, getPrintableMm, testPrint, BarcodeType,
 } from '../lib/escpos';
-import { loadLabelConfig } from '../lib/labelConfig';
+import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
+import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
 import { useBackDismiss } from '../lib/backNavigation';
 
 interface SingleLabelModalProps {
@@ -186,14 +187,20 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
 
     try {
       await new Promise(r => setTimeout(r, 300));
-      await printerBridge.send(escInit());
-      await printerBridge.send(setCodePage('CP437'));
 
-      for (let i = 0; i < quantity; i++) {
-        await printerBridge.send(buildThermalLabel(labelOptions));
-        setBtProgress({ current: i + 1, total: quantity });
-        if (i < quantity - 1) {
-          await new Promise(r => setTimeout(r, 150));
+      if (config.protocol === 'tspl') {
+        await printerBridge.send(buildTsplLabel({ ...labelOptions, copies: quantity }));
+        setBtProgress({ current: quantity, total: quantity });
+      } else {
+        await printerBridge.send(escInit());
+        await printerBridge.send(setCodePage('CP437'));
+
+        for (let i = 0; i < quantity; i++) {
+          await printerBridge.send(buildThermalLabel(labelOptions));
+          setBtProgress({ current: i + 1, total: quantity });
+          if (i < quantity - 1) {
+            await new Promise(r => setTimeout(r, 150));
+          }
         }
       }
     } catch (err: any) {
@@ -212,7 +219,11 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(testPrint());
+      await printerBridge.send(
+        config.protocol === 'tspl'
+          ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
+          : testPrint()
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
     }
@@ -222,10 +233,20 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(feedPitch(effLabelHeight, effLabelGap, effFeedOffset));
+      await printerBridge.send(
+        config.protocol === 'tspl'
+          ? feedTspl()
+          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
+  };
+
+  const setProtocol = (protocol: LabelConfig['protocol']) => {
+    const next = { ...config, protocol };
+    setConfig(next);
+    saveLabelConfig(next);
   };
 
   const previewScale = Math.min(280 / effLabelWidth, 6);
@@ -493,14 +514,23 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
 
         {/* Footer Actions */}
         <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="flex items-center space-x-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {btAvailable && (
               <>
+                <select
+                  value={config.protocol}
+                  onChange={e => setProtocol(e.target.value as LabelConfig['protocol'])}
+                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 focus:outline-none cursor-pointer"
+                  title="Match this to the printer's current mode"
+                >
+                  <option value="escpos">ESC/POS</option>
+                  <option value="tspl">TSPL label</option>
+                </select>
                 <button
                   onClick={handleTestPrint}
                   disabled={!btConnected || btPrinting}
                   className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
-                  title="Print test receipt"
+                  title="Print test label"
                 >
                   Test
                 </button>

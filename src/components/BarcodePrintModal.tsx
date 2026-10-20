@@ -4,13 +4,14 @@ import {
   Tag, Bluetooth, BluetoothOff, Loader2, CheckCircle2, AlertCircle,
   Minus, Plus, Ruler, Scissors, Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, LabelConfig } from '../types';
 import BarcodeSVG from './BarcodeSVG';
 import * as printerBridge from '../lib/printerBridge';
 import {
   buildThermalLabel, init as escInit, setCodePage, feedPitch,
   normalizeBarcodeValue, getPrintableMm, testPrint,
 } from '../lib/escpos';
+import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
 
 interface BarcodePrintModalProps {
@@ -57,6 +58,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const [showCodeText, setShowCodeText] = useState(initialConfig.showCodeText);
 
   const [paperMode, setPaperMode] = useState<'sticker' | 'receipt'>(initialConfig.paperMode);
+  const [protocol, setProtocol] = useState<LabelConfig['protocol']>(initialConfig.protocol);
 
   const [paperWidth, setPaperWidth] = useState(initialConfig.paperWidth);
   const [labelWidth, setLabelWidth] = useState(initialConfig.labelWidth);
@@ -88,6 +90,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       setShowPrice(cfg.showPrice);
       setShowCodeText(cfg.showCodeText);
       setPaperMode(cfg.paperMode);
+      setProtocol(cfg.protocol);
       setPaperWidth(cfg.paperWidth);
       setLabelWidth(cfg.labelWidth);
       setLabelHeight(cfg.labelHeight);
@@ -106,6 +109,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     const next = updater({
       ...current,
       paperMode,
+      protocol,
       paperWidth,
       labelWidth,
       labelHeight,
@@ -128,6 +132,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     setShowPrice(next.showPrice);
     setShowCodeText(next.showCodeText);
     setPaperMode(next.paperMode);
+    setProtocol(next.protocol);
     setPaperWidth(next.paperWidth);
     setLabelWidth(next.labelWidth);
     setLabelHeight(next.labelHeight);
@@ -139,7 +144,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     setLayoutXY(next.layoutXY);
     setFontSize(next.fontSize);
     saveLabelConfig(next);
-  }, [paperMode, paperWidth, labelWidth, labelHeight, barcodeWidth, barcodeHeight, cutMode, labelGap, feedOffset, showStoreName, showProductName, showPrice, showCodeText, storeName, layoutXY, fontSize, businessName]);
+  }, [paperMode, protocol, paperWidth, labelWidth, labelHeight, barcodeWidth, barcodeHeight, cutMode, labelGap, feedOffset, showStoreName, showProductName, showPrice, showCodeText, storeName, layoutXY, fontSize, businessName]);
 
   const [dragState, setDragState] = useState<{
     elem: 'store' | 'product' | 'barcode' | 'price';
@@ -428,15 +433,27 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
     try {
       await new Promise(r => setTimeout(r, 400));
-      await printerBridge.send(escInit());
-      await printerBridge.send(setCodePage('CP437'));
 
-      for (let i = 0; i < printItemsList.length; i++) {
-        const item = printItemsList[i];
-        await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
-        setBtProgress({ current: i + 1, total: printItemsList.length });
-        if (i < printItemsList.length - 1) {
-          await new Promise(r => setTimeout(r, 150));
+      if (protocol === 'tspl') {
+        for (let i = 0; i < printItemsList.length; i++) {
+          const item = printItemsList[i];
+          await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
+          setBtProgress({ current: i + 1, total: printItemsList.length });
+          if (i < printItemsList.length - 1) {
+            await new Promise(r => setTimeout(r, 150));
+          }
+        }
+      } else {
+        await printerBridge.send(escInit());
+        await printerBridge.send(setCodePage('CP437'));
+
+        for (let i = 0; i < printItemsList.length; i++) {
+          const item = printItemsList[i];
+          await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
+          setBtProgress({ current: i + 1, total: printItemsList.length });
+          if (i < printItemsList.length - 1) {
+            await new Promise(r => setTimeout(r, 150));
+          }
         }
       }
     } catch (err: any) {
@@ -449,27 +466,35 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       setBtPrinting(false);
       setBtProgress({ current: 0, total: 0 });
     }
-  }, [printItemsList, labelOptionsFor, btPrinting]);
+  }, [printItemsList, labelOptionsFor, btPrinting, protocol]);
 
   const handleTestPrint = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(testPrint());
+      await printerBridge.send(
+        protocol === 'tspl'
+          ? testPrintTspl(storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
+          : testPrint()
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
     }
-  }, [btPrinting]);
+  }, [btPrinting, protocol, storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
 
   const handleFeedAlign = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(feedPitch(effLabelHeight, effLabelGap, effFeedOffset));
+      await printerBridge.send(
+        protocol === 'tspl'
+          ? feedTspl()
+          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
+      );
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
-  }, [btPrinting, effLabelHeight, effLabelGap, effFeedOffset]);
+  }, [btPrinting, protocol, effLabelHeight, effLabelGap, effFeedOffset]);
 
   if (!isOpen) return null;
 
@@ -913,6 +938,23 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                      <span className="inline-flex items-center justify-center gap-1"><Printer className="w-3 h-3" />Receipt Roll</span>
                    </button>
                  </div>
+               </div>
+
+               <div>
+                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                   Printer Language
+                 </label>
+                 <div className="flex gap-1.5 text-xs">
+                   <button onClick={() => updateConfig(p => ({ ...p, protocol: 'escpos' }))} className={segBtn(protocol === 'escpos')}>
+                     ESC/POS (Receipt)
+                   </button>
+                   <button onClick={() => updateConfig(p => ({ ...p, protocol: 'tspl' }))} className={segBtn(protocol === 'tspl')}>
+                     TSPL (Label)
+                   </button>
+                 </div>
+                 <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                   Match this to the printer mode. Blank paper usually means the mode and language do not match.
+                 </p>
                </div>
 
                <div className="grid grid-cols-3 gap-2">

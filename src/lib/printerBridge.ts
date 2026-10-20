@@ -130,11 +130,17 @@ export async function send(data: Uint8Array): Promise<void> {
     throw new Error('Not connected to a printer');
   }
   if (isNativeMode()) {
-    await BluetoothSerial.write({
-      address: nativeAddress,
-      value: bytesToLatin1(data),
-      charset: 'ISO-8859-1',
-    });
+    const chunkSize = 512;
+    for (let offset = 0; offset < data.length; offset += chunkSize) {
+      await BluetoothSerial.write({
+        address: nativeAddress,
+        value: bytesToLatin1(data.subarray(offset, offset + chunkSize)),
+        charset: 'ISO-8859-1',
+      });
+      if (offset + chunkSize < data.length) {
+        await sleep(15);
+      }
+    }
     return;
   }
   await webBt.send(data);
@@ -195,4 +201,8 @@ function bytesToLatin1(bytes: Uint8Array): string {
     s += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
   }
   return s;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

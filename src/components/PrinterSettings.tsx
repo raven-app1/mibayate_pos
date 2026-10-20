@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import * as printerBridge from '../lib/printerBridge';
 import { buildLabel, text, separator, feed, cut, init as escInit, setCodePage } from '../lib/escpos';
+import { testPrintTspl } from '../lib/tspl';
+import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
 import { useToast } from '../utils/toast';
 
 // PRINTER_ROLE keys: role -> immutable localStorage key
@@ -38,6 +40,7 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
   // ── Configuration (which physical printer serves each role) ───────────────
   const [barcodeName, setBarcodeName] = useState(() => loadAssignedName(BARCODE_KEY));
   const [slipName, setSlipName] = useState(() => loadAssignedName(SLIP_KEY));
+  const [labelProtocol, setLabelProtocol] = useState<'escpos' | 'tspl'>(() => loadLabelConfig().protocol);
 
   // ── Unified bridge (native SPP in the Android shell, Web BT in browser) ───
   const isNative = printerBridge.isNativeShell();
@@ -119,39 +122,56 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
     toast(`"${printerName}" set as ${role === 'barcode' ? 'Barcode' : 'Slip'} printer.`, 'success');
   };
 
+  const handleSetLabelProtocol = (protocol: 'escpos' | 'tspl') => {
+    const config = loadLabelConfig(storeName);
+    saveLabelConfig({ ...config, protocol });
+    setLabelProtocol(protocol);
+    toast(`Barcode label language set to ${protocol === 'tspl' ? 'TSPL' : 'ESC/POS'}.`, 'success');
+  };
+
   const handleTestPrint = useCallback(async (role: PrinterRole) => {
     if (!printerBridge.isConnected() || testingRole) return;
     setTestingRole(role);
     setBtError(null);
     try {
-      await printerBridge.send(escInit());
-      await printerBridge.send(setCodePage('CP437'));
-
-      if (role === 'barcode') {
-        await printerBridge.send(buildLabel({
-          storeName: storeName || 'My Store',
-          productName: 'Test Product',
-          barcodeValue: '0123456789012',
-          price: 25,
-          currencySymbol: 'Ks',
-        }));
+      if (role === 'barcode' && labelProtocol === 'tspl') {
+        const cfg = loadLabelConfig(storeName);
+        await printerBridge.send(testPrintTspl(
+          storeName || cfg.storeName || 'My Store',
+          parseFloat(cfg.labelWidth) || 50,
+          parseFloat(cfg.labelHeight) || 30,
+          parseFloat(cfg.labelGap) || 3,
+        ));
       } else {
-        const rows = [
-          text(storeName || 'My Store', { align: 'center', bold: true, width: 2, height: 2 }),
-          separator('-', 32),
-          text('TEST RECEIPT', { align: 'center', bold: true }),
-          separator('-', 32),
-          text('1 x Test Product     25.00'),
-          text('Total              25.00'),
-          text('Change               0.00'),
-          separator('=', 32),
-          text('Thank you for shopping!', { align: 'center' }),
-          feed(4),
-          cut(),
-        ];
-        for (const r of rows) {
-          await printerBridge.send(r);
-          await new Promise(res => setTimeout(res, 60));
+        await printerBridge.send(escInit());
+        await printerBridge.send(setCodePage('CP437'));
+
+        if (role === 'barcode') {
+          await printerBridge.send(buildLabel({
+            storeName: storeName || 'My Store',
+            productName: 'Test Product',
+            barcodeValue: '0123456789012',
+            price: 25,
+            currencySymbol: 'Ks',
+          }));
+        } else {
+          const rows = [
+            text(storeName || 'My Store', { align: 'center', bold: true, width: 2, height: 2 }),
+            separator('-', 32),
+            text('TEST RECEIPT', { align: 'center', bold: true }),
+            separator('-', 32),
+            text('1 x Test Product     25.00'),
+            text('Total              25.00'),
+            text('Change               0.00'),
+            separator('=', 32),
+            text('Thank you for shopping!', { align: 'center' }),
+            feed(4),
+            cut(),
+          ];
+          for (const r of rows) {
+            await printerBridge.send(r);
+            await new Promise(res => setTimeout(res, 60));
+          }
         }
       }
 
@@ -165,7 +185,7 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
     } finally {
       setTestingRole(null);
     }
-  }, [storeName, testingRole]);
+  }, [storeName, testingRole, labelProtocol]);
 
   const roleSpecs: Array<{
     role: PrinterRole;
@@ -479,6 +499,31 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
                   </>
                 )}
               </div>
+
+              {spec.role === 'barcode' && (
+                <div className="px-4 pb-4 -mt-1 space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Label Print Language
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSetLabelProtocol('escpos')}
+                      className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${labelProtocol === 'escpos' ? 'bg-black text-white border-black' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      ESC/POS
+                    </button>
+                    <button
+                      onClick={() => handleSetLabelProtocol('tspl')}
+                      className={`flex-1 px-3 py-2 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${labelProtocol === 'tspl' ? 'bg-black text-white border-black' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      TSPL Label
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    Set the printer to its matching Label (TSPL) or Receipt (ESC/POS) mode. Blank paper means the printer mode and this setting do not match.
+                  </p>
+                </div>
+              )}
             </div>
           );
         })}
@@ -493,7 +538,7 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px] text-slate-600 leading-relaxed list-disc list-inside">
           {isNative ? (
             <>
-              <li>Pair the RPP02N in Android Settings → Bluetooth before using this app.</li>
+              <li>Pair your printer in Android Settings → Bluetooth before using this app.</li>
               <li>"Refresh" reloads the phone's paired devices — no device chooser needed.</li>
               <li>Only one printer stays actively connected at a time on this device.</li>
               <li>Assignments persist locally, so you always know which printer is which.</li>
@@ -508,6 +553,7 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
               <li>Use <strong>Test</strong> to confirm spacing before a real print run.</li>
             </>
           )}
+          <li>Most label printers use TSPL in Label mode and ESC/POS in Receipt mode. The language above must match the printer's mode.</li>
         </ul>
       </div>
     </div>
