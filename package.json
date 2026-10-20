@@ -1,7 +1,7 @@
 {
   "name": "mibayate-pos",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "cap:sync": "cap sync android",
-    "cap:android": "npm run build && cap sync android",
+    "cap:sync": "cap sync android && node scripts/patch-android-camera.mjs",
+    "cap:android": "npm run build && npm run cap:sync",
     "cap:open": "cap open android",
     "test": "vitest run"
   },
