@@ -97,12 +97,15 @@ interface TextLayout {
 }
 
 function layoutText(ctx: CanvasRenderingContext2D, run: RasterTextRun): TextLayout {
+  const singleLine = run.maxLines === 1;
   let px = Math.max(9, Math.round(run.px));
   if (run.heightDots && run.heightDots > 0) {
-    px = Math.min(px, Math.max(9, Math.floor(run.heightDots / LINE_RATIO)));
+    px = singleLine
+      ? Math.min(px, Math.max(9, run.heightDots - 2))
+      : Math.min(px, Math.max(9, Math.floor(run.heightDots / LINE_RATIO)));
   }
   const font = fontFor(px, !!run.bold);
-  const lineHeight = Math.max(px + 3, Math.round(px * LINE_RATIO));
+  const lineHeight = singleLine ? px + 2 : Math.max(px + 3, Math.round(px * LINE_RATIO));
   const maxByHeight = run.heightDots && run.heightDots > 0
     ? Math.max(1, Math.floor(run.heightDots / lineHeight))
     : 999;
@@ -249,7 +252,7 @@ export function renderTextLayer(
 
   layer.fillStyle = '#fff';
   layer.fillRect(0, 0, widthDots, heightDots);
-  layer.textBaseline = 'alphabetic';
+  layer.textBaseline = 'middle';
   layer.textAlign = 'left';
   layer.fillStyle = '#000';
 
@@ -257,14 +260,17 @@ export function renderTextLayer(
     const layout = layoutText(layer, run);
     if (layout.lines.length === 0) continue;
     layer.font = layout.font;
+    const blockHeight = layout.lines.length * layout.lineHeight;
+    const boxHeight = run.heightDots && run.heightDots > 0 ? run.heightDots : blockHeight;
+    const top = run.yDots + Math.max(0, Math.floor((boxHeight - blockHeight) / 2));
     layout.lines.forEach((line, index) => {
       const width = layer.measureText(line).width;
       let x = run.xDots + 1;
       if (run.align === 'center') x = run.xDots + (run.widthDots - width) / 2;
       else if (run.align === 'right') x = run.xDots + run.widthDots - width - 1;
-      const baseline = run.yDots + index * layout.lineHeight + Math.round(layout.px * 1.12);
-      if (baseline >= 0 && baseline - layout.px < heightDots) {
-        layer.fillText(line, Math.max(1, x), baseline);
+      const centerY = top + index * layout.lineHeight + layout.lineHeight / 2;
+      if (centerY - layout.px / 2 >= 0 && centerY - layout.px / 2 < heightDots) {
+        layer.fillText(line, Math.max(1, x), centerY);
       }
     });
   }

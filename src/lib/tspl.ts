@@ -213,21 +213,23 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   if (hasLayout) {
     if (showStoreName && storeName && storePos) {
       const size = storePos.size ?? 1;
+      const boxHeightDots = storePos.heightMm ? dots(storePos.heightMm, dotsPerMm) : 0;
       runs.push({
         text: storeName,
         xDots: dots(storePos.xMm, dotsPerMm),
         yDots: dots(storePos.yMm, dotsPerMm),
         widthDots: Math.max(dots(storePos.widthMm ?? (widthMm - storePos.xMm), dotsPerMm), 20),
-        heightDots: storePos.heightMm ? dots(storePos.heightMm, dotsPerMm) : undefined,
-        px: FONT_HEIGHT['3'] * size,
+        heightDots: boxHeightDots || undefined,
+        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * 0.75)) : FONT_HEIGHT['3'] * size,
         bold: true,
+        align: 'center',
         maxLines: 1,
       });
     }
 
     if (showProductName && productName && productPos) {
       const size = productPos.size ?? 1;
-      const availableHeight = productPos.heightMm
+      const boxHeightDots = productPos.heightMm
         ? dots(productPos.heightMm, dotsPerMm)
         : Math.max(heightDots - dots(productPos.yMm, dotsPerMm), 20);
       runs.push({
@@ -235,33 +237,57 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
         xDots: dots(productPos.xMm, dotsPerMm),
         yDots: dots(productPos.yMm, dotsPerMm),
         widthDots: Math.max(dots(productPos.widthMm ?? (widthMm - productPos.xMm), dotsPerMm), 20),
-        heightDots: availableHeight,
-        px: FONT_HEIGHT['2'] * size,
+        heightDots: boxHeightDots,
+        px: productPos.heightMm ? Math.max(9, Math.round(boxHeightDots * 0.6)) : FONT_HEIGHT['2'] * size,
+        bold: true,
+        align: 'center',
+        maxLines: 2,
       });
     }
 
     if (showPrice && priceValue && pricePos) {
       const size = pricePos.size ?? 1;
+      const boxHeightDots = pricePos.heightMm ? dots(pricePos.heightMm, dotsPerMm) : 0;
       runs.push({
         text: priceValue,
         xDots: dots(pricePos.xMm, dotsPerMm),
         yDots: dots(pricePos.yMm, dotsPerMm),
         widthDots: Math.max(dots(pricePos.widthMm ?? (widthMm - pricePos.xMm), dotsPerMm), 20),
-        heightDots: pricePos.heightMm ? dots(pricePos.heightMm, dotsPerMm) : undefined,
-        px: FONT_HEIGHT['3'] * size,
+        heightDots: boxHeightDots || undefined,
+        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * 0.75)) : FONT_HEIGHT['3'] * size,
         bold: true,
+        align: 'center',
         maxLines: 1,
       });
     }
 
     if (barcodePos) {
-      const availableWidth = Math.max(dots(barcodePos.widthMm ?? (widthMm - barcodePos.xMm), dotsPerMm), 40);
-      const height = barcodePos.heightMm
+      const boxX = dots(barcodePos.xMm, dotsPerMm);
+      const boxY = dots(barcodePos.yMm, dotsPerMm);
+      const boxWidth = Math.max(dots(barcodePos.widthMm ?? (widthMm - barcodePos.xMm), dotsPerMm), 40);
+      const boxHeight = barcodePos.heightMm
         ? Math.max(dots(barcodePos.heightMm, dotsPerMm), 20)
         : barcodeHeightDots;
-      const narrow = Math.min(Math.max(Math.floor(availableWidth / barcodeModules), 1), 4);
+      const hriDots = showBarcodeText
+        ? Math.max(dots(Math.min(Math.max((barcodePos.heightMm ?? barcodeHeightMm) * 0.22, 1.5), 4), dotsPerMm), 12)
+        : 0;
+      const barHeight = Math.max(boxHeight - hriDots, 20);
+      const narrow = Math.min(Math.max(Math.floor(boxWidth / barcodeModules), 1), 4);
       const wide = Math.min(narrow * 2, 10);
-      barcodeCommand = `BARCODE ${dots(barcodePos.xMm, dotsPerMm)},${dots(barcodePos.yMm, dotsPerMm)},"${tsplBarcodeType(barcodeType)}",${height},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`;
+      const barcodeX = boxX + Math.max(0, Math.floor((boxWidth - barcodeModules * narrow) / 2));
+      barcodeCommand = `BARCODE ${barcodeX},${boxY},"${tsplBarcodeType(barcodeType)}",${barHeight},0,0,${narrow},${wide},"${sanitize(barcodeData)}"`;
+      if (showBarcodeText) {
+        runs.push({
+          text: barcodeData,
+          xDots: boxX,
+          yDots: boxY + barHeight,
+          widthDots: boxWidth,
+          heightDots: hriDots,
+          px: Math.max(9, hriDots),
+          align: 'center',
+          maxLines: 1,
+        });
+      }
     }
   } else {
     const margin = dots(1, dotsPerMm);
@@ -365,8 +391,9 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
     showProductName ? productName : '',
     showPrice ? priceText(price, currencySymbol) : '',
   ].join(' ');
+  const hasCustomLayout = !!(layout?.storeName || layout?.productName || layout?.barcode || layout?.price);
 
-  if (canRasterizeText() && hasNonAscii(visibleText)) {
+  if (canRasterizeText() && (hasNonAscii(visibleText) || hasCustomLayout)) {
     const rasterLabel = buildTsplRasterLabel(opts);
     if (rasterLabel) return rasterLabel;
   }
