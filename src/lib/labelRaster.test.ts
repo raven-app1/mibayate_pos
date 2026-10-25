@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { cropRaster, hasNonAscii } from './labelRaster';
+import { describe, expect, it, vi } from 'vitest';
+import { cropRaster, hasNonAscii, renderTextLayer } from './labelRaster';
 
 function makeImage(widthDots: number, heightDots: number, points: Array<[number, number]>) {
   const widthBytes = Math.ceil(widthDots / 8);
@@ -46,5 +46,34 @@ describe('labelRaster', () => {
 
   it('returns null for an empty raster', () => {
     expect(cropRaster(makeImage(16, 8, []))).toBeNull();
+  });
+
+  it('paints barcode bar rectangles into the raster layer', () => {
+    const filled: Array<[number, number, number, number]> = [];
+    const createElement = document.createElement.bind(document);
+    const spy = vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName !== 'canvas') return createElement(tagName);
+      const context = {
+        font: '',
+        fillStyle: '',
+        textBaseline: '',
+        textAlign: '',
+        measureText: () => ({ width: 0 }),
+        fillRect: (x: number, y: number, w: number, h: number) => filled.push([x, y, w, h]),
+        fillText: () => undefined,
+        getImageData: (_x: number, _y: number, w: number, h: number) => ({
+          data: new Uint8ClampedArray(w * h * 4),
+        }),
+      };
+      return { width: 0, height: 0, getContext: () => context } as unknown as HTMLCanvasElement;
+    });
+
+    const layer = renderTextLayer([], 64, 40, [
+      { xDots: 4, yDots: 6, widthDots: 2, heightDots: 10 },
+    ]);
+
+    expect(layer).not.toBeNull();
+    expect(filled).toContainEqual([4, 6, 2, 10]);
+    spy.mockRestore();
   });
 });

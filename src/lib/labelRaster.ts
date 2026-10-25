@@ -27,6 +27,13 @@ export interface RasterTextBlock {
   heightDots: number;
 }
 
+export interface RasterBar {
+  xDots: number;
+  yDots: number;
+  widthDots: number;
+  heightDots: number;
+}
+
 const FONT_FAMILY = 'MiBayate Myanmar Print';
 const FONT_STACK = `"${FONT_FAMILY}", "Noto Sans Myanmar", "Myanmar Text", "Padauk", sans-serif`;
 const LINE_RATIO = 1.6;
@@ -356,6 +363,7 @@ export function renderTextLayer(
   runs: RasterTextRun[],
   widthDots: number,
   heightDots: number,
+  bars: RasterBar[] = [],
 ): RasterImage | null {
   if (!canRasterizeText() || widthDots <= 0 || heightDots <= 0) return null;
   const ctx = measuringContext();
@@ -390,6 +398,10 @@ export function renderTextLayer(
         layer.fillText(line, Math.max(1, x), centerY);
       }
     });
+  }
+
+  for (const bar of bars) {
+    layer.fillRect(bar.xDots, bar.yDots, bar.widthDots, bar.heightDots);
   }
 
   return packCanvas(layer, widthDots, heightDots);

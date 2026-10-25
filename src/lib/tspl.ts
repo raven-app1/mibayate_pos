@@ -5,6 +5,7 @@ import {
 } from './escpos';
 import {
   PositionedRasterImage,
+  RasterBar,
   RasterTextRun,
   canRasterizeText,
   cropRaster,
@@ -12,6 +13,7 @@ import {
   measureTextBlockHeight,
   renderTextLayer,
 } from './labelRaster';
+import { code128BarRects } from './code128';
 
 export interface TsplLabelOptions extends ThermalLabelOptions {
   copies?: number;
@@ -217,6 +219,7 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
   const barcodeModules = estimateBarcodeModules(barcodeData, barcodeType);
   const runs: RasterTextRun[] = [];
+  const bars: RasterBar[] = [];
   let barcodeCommand = '';
 
   const storePos = layout?.storeName;
@@ -287,10 +290,12 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
         ? Math.max(dots(Math.min(Math.max((barcodePos.heightMm ?? barcodeHeightMm) * 0.22, 1.5), 4), dotsPerMm), 12)
         : 0;
       const barHeight = Math.max(boxHeight - hriDots, 20);
-      const narrow = Math.min(Math.max(Math.floor(boxWidth / barcodeModules), 1), 4);
-      const wide = Math.min(narrow * 2, 10);
-      const barcodeX = boxX + Math.max(0, Math.floor((boxWidth - barcodeModules * narrow) / 2));
-      barcodeCommand = `BARCODE ${barcodeX},${boxY},"${tsplBarcodeType(barcodeType)}",${barHeight},0,0,${narrow},${wide},"${sanitize(barcodeData)}"`;
+      bars.push(...code128BarRects(barcodeData, {
+        xDots: boxX,
+        yDots: boxY,
+        widthDots: boxWidth,
+        heightDots: barHeight,
+      }));
       if (showBarcodeText) {
         runs.push({
           text: barcodeData,
@@ -362,7 +367,7 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
     }
   }
 
-  const layer = renderTextLayer(runs, widthDots, heightDots);
+  const layer = renderTextLayer(runs, widthDots, heightDots, bars);
   const image = layer ? cropRaster(layer) : null;
   if (!image) return null;
 
