@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Printer, X, Search, CheckSquare, Square, Settings2,
   Tag, Bluetooth, BluetoothOff, Loader2, CheckCircle2, AlertCircle,
-  Minus, Plus, Ruler, Scissors, RefreshCw, Save, Layers,
+  Minus, Plus, Ruler, RefreshCw, Save, Layers,
   Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
-import BarcodeSVG from './BarcodeSVG';
+import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
-import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
+import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
@@ -177,8 +177,10 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
   const effLabelWidth = clamp(parseMm(config.labelWidth) || effPaperWidth, 5, effPaperWidth);
   const effLabelHeight = clamp(parseMm(config.labelHeight) || 30, 8, 300);
 
+  const effDesignWidth = Math.min(effLabelWidth, printableMm);
+
   const effElemX = (k: 'store' | 'product' | 'barcode' | 'price') =>
-    clamp(parseMm(config.layoutXY[k].x) || 0, 0, Math.max(0, effLabelWidth - 5));
+    clamp(parseMm(config.layoutXY[k].x) || 0, 0, Math.max(0, effDesignWidth - 5));
 
   const effElemY = (k: 'store' | 'product' | 'barcode' | 'price') =>
     clamp(parseMm(config.layoutXY[k].y) || 0, 0, Math.max(0, effLabelHeight - 3));
@@ -188,12 +190,12 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     if (rawStr !== undefined && rawStr !== '') {
       const n = parseFloat(rawStr);
       if (isFinite(n)) {
-        return clamp(n, 1, Math.max(1, effLabelWidth - effElemX(k)));
+        return clamp(n, 1, Math.max(1, effDesignWidth - effElemX(k)));
       }
       return 1;
     }
-    const defaultW = k === 'barcode' ? (parseMm(config.barcodeWidth) || Math.max(10, effLabelWidth - 4)) : Math.max(1, effLabelWidth - effElemX(k));
-    return clamp(defaultW, 1, Math.max(1, effLabelWidth - effElemX(k)));
+    const defaultW = k === 'barcode' ? (parseMm(config.barcodeWidth) || Math.max(10, effDesignWidth - 4)) : Math.max(1, effDesignWidth - effElemX(k));
+    return clamp(defaultW, 1, Math.max(1, effDesignWidth - effElemX(k)));
   };
 
   const effElemH = (k: 'store' | 'product' | 'barcode' | 'price') => {
@@ -368,7 +370,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     labelWidthMm: effLabelWidth,
     labelHeightMm: effLabelHeight,
     barcodeType: 'CODE128' as const,
-    barcodeWidthMm: effBarcodeWidth,
     barcodeHeightMm: effBarcodeHeight,
     cutMode: config.paperMode === 'sticker' ? ('off' as const) : config.cutMode,
     paperMode: config.paperMode,
@@ -501,13 +502,25 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
     }`;
 
-  const sampleCodeVal = normalizeBarcodeValue(sampleProduct.barcode || sampleProduct.sku || '000000', 'CODE128');
-
   const renderCanvasCard = () => (
     <div
       className="bg-white border border-slate-400 rounded shadow-md select-none overflow-hidden touch-none relative transition-transform duration-75"
       style={{ width: previewW, height: previewH }}
     >
+      <LabelRasterPreview
+        options={labelOptionsFor(sampleProduct)}
+        widthMm={effLabelWidth}
+        heightMm={effLabelHeight}
+        scale={previewScale}
+      />
+      {printableMm < effLabelWidth && (
+        <div
+          className="absolute top-0 bottom-0 w-px border-l border-dashed border-slate-400/70 pointer-events-none"
+          style={{ left: printableMm * previewScale }}
+          title={`${printableMm}mm printable width`}
+        />
+      )}
+
       {config.showStoreName && (
         <div
           className="absolute border border-dashed border-slate-400/80 hover:border-black bg-slate-900/5 rounded group flex items-center justify-center select-none cursor-move p-0.5"
@@ -522,12 +535,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
           onPointerUp={handlePointerUp}
           title={`Store Name (${effElemW('store').toFixed(1)}×${effElemH('store').toFixed(1)}mm)`}
         >
-          <span
-            className="font-extrabold uppercase text-slate-800 truncate w-full text-center pointer-events-none"
-            style={{ fontSize: Math.max(6, Math.min(28, effElemH('store') * previewScale * 0.75)) }}
-          >
-            {config.storeName || businessName || 'My Store'}
-          </span>
           <div
             className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
             onPointerDown={(e) => handlePointerDown(e, 'store', 'resize-e')}
@@ -566,12 +573,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
           onPointerUp={handlePointerUp}
           title={`Product Title (${effElemW('product').toFixed(1)}×${effElemH('product').toFixed(1)}mm)`}
         >
-          <p
-            className="font-extrabold text-slate-900 leading-tight line-clamp-2 w-full text-center pointer-events-none"
-            style={{ fontSize: Math.max(6, Math.min(24, effElemH('product') * previewScale * 0.6)) }}
-          >
-            {sampleProduct.name}
-          </p>
           <div
             className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
             onPointerDown={(e) => handlePointerDown(e, 'product', 'resize-e')}
@@ -609,23 +610,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
         onPointerUp={handlePointerUp}
         title={`Barcode CODE128 (${effBarcodeWidth.toFixed(1)}×${effBarcodeHeight.toFixed(1)}mm)`}
       >
-        <div className="w-full h-full flex flex-col items-center justify-between overflow-hidden pointer-events-none min-h-0">
-          <BarcodeSVG
-            value={sampleCodeVal}
-            height={Math.max(10, Math.round(effBarcodeHeight * previewScale - (config.showCodeText ? 10 : 0)))}
-            showValue={false}
-            className="w-full flex-1 min-h-0"
-          />
-          {config.showCodeText && (
-            <div
-              className="font-mono font-bold text-slate-900 text-center truncate w-full shrink-0 leading-tight mt-0.5"
-              style={{ fontSize: Math.max(6, Math.min(14, effBarcodeHeight * previewScale * 0.22)) }}
-            >
-              {sampleCodeVal}
-            </div>
-          )}
-        </div>
-
         <div
           className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 hover:opacity-100 z-10 touch-none"
           onPointerDown={(e) => handlePointerDown(e, 'barcode', 'resize-e')}
@@ -663,12 +647,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
           onPointerUp={handlePointerUp}
           title={`Price Tag (${effElemW('price').toFixed(1)}×${effElemH('price').toFixed(1)}mm)`}
         >
-          <span
-            className="font-extrabold font-mono text-slate-900 px-1 truncate pointer-events-none"
-            style={{ fontSize: Math.max(6, Math.min(26, effElemH('price') * previewScale * 0.75)) }}
-          >
-            {sampleProduct.price.toLocaleString()} {currencySymbol}
-          </span>
           <div
             className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
             onPointerDown={(e) => handlePointerDown(e, 'price', 'resize-e')}

@@ -22,11 +22,6 @@ export interface PositionedRasterImage extends RasterImage {
   yDots: number;
 }
 
-export interface RasterTextBlock {
-  image: RasterImage;
-  heightDots: number;
-}
-
 export interface RasterBar {
   xDots: number;
   yDots: number;
@@ -312,51 +307,6 @@ export function measureTextBlockHeight(run: RasterTextRun): number {
   if (!ctx) return 0;
   const layout = layoutText(ctx, run);
   return layout.lines.length * layout.lineHeight;
-}
-
-export function renderTextBlock(run: RasterTextRun): RasterTextBlock | null {
-  if (!canRasterizeText()) return null;
-  const measure = measuringContext();
-  if (!measure) return null;
-
-  const layout = layoutText(measure, run);
-  if (layout.lines.length === 0) return null;
-
-  measure.font = layout.font;
-  const lineWidths = layout.lines.map(line => measure.measureText(line).width);
-  const maxLineWidth = Math.max(...lineWidths);
-  const align = run.align ?? 'left';
-  const trimmed = align === 'left';
-  const widthDots = trimmed
-    ? Math.min(run.widthDots, Math.max(1, Math.ceil(maxLineWidth) + 3))
-    : Math.max(1, run.widthDots);
-  const heightDots = layout.lines.length * layout.lineHeight;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = widthDots;
-  canvas.height = heightDots;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, widthDots, heightDots);
-  ctx.font = layout.font;
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#000';
-
-  layout.lines.forEach((line, index) => {
-    const width = ctx.measureText(line).width;
-    let x = 1;
-    if (align === 'center') x = (widthDots - width) / 2;
-    else if (align === 'right') x = widthDots - width - 1;
-    x = Math.max(1, x);
-    const baseline = index * layout.lineHeight + Math.round(layout.px * 1.12);
-    ctx.fillText(line, x, baseline);
-  });
-
-  const image = packCanvas(ctx, widthDots, heightDots);
-  return { image, heightDots };
 }
 
 export function renderTextLayer(

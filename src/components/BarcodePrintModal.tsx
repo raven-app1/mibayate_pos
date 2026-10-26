@@ -5,9 +5,9 @@ import {
   Minus, Plus, Ruler, Scissors, Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
-import BarcodeSVG from './BarcodeSVG';
+import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
-import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
+import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
@@ -175,8 +175,10 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const effLabelWidth = clamp(parseMm(labelWidth) || effPaperWidth, 5, effPaperWidth);
   const effLabelHeight = clamp(parseMm(labelHeight) || 30, 8, 300);
 
+  const effDesignWidth = Math.min(effLabelWidth, printableMm);
+
   const effElemX = (k: 'store' | 'product' | 'barcode' | 'price') =>
-    clamp(parseMm(layoutXY[k].x) || 0, 0, Math.max(0, effLabelWidth - 5));
+    clamp(parseMm(layoutXY[k].x) || 0, 0, Math.max(0, effDesignWidth - 5));
 
   const effElemY = (k: 'store' | 'product' | 'barcode' | 'price') =>
     clamp(parseMm(layoutXY[k].y) || 0, 0, Math.max(0, effLabelHeight - 3));
@@ -186,12 +188,12 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     if (rawStr !== undefined && rawStr !== '') {
       const n = parseFloat(rawStr);
       if (isFinite(n)) {
-        return clamp(n, 1, Math.max(1, effLabelWidth - effElemX(k)));
+        return clamp(n, 1, Math.max(1, effDesignWidth - effElemX(k)));
       }
       return 1;
     }
-    const defaultW = k === 'barcode' ? (parseMm(barcodeWidth) || Math.max(10, effLabelWidth - 4)) : Math.max(1, effLabelWidth - effElemX(k));
-    return clamp(defaultW, 1, Math.max(1, effLabelWidth - effElemX(k)));
+    const defaultW = k === 'barcode' ? (parseMm(barcodeWidth) || Math.max(10, effDesignWidth - 4)) : Math.max(1, effDesignWidth - effElemX(k));
+    return clamp(defaultW, 1, Math.max(1, effDesignWidth - effElemX(k)));
   };
 
   const effElemH = (k: 'store' | 'product' | 'barcode' | 'price') => {
@@ -418,7 +420,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     labelWidthMm: effLabelWidth,
     labelHeightMm: effLabelHeight,
     barcodeType: 'CODE128' as const,
-    barcodeWidthMm: effBarcodeWidth,
     barcodeHeightMm: effBarcodeHeight,
     cutMode: paperMode === 'sticker' ? ('off' as const) : cutMode,
     paperMode,
@@ -545,12 +546,25 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     }`;
 
   const renderSingleLabelCard = (productItem: Product) => {
-    const codeVal = normalizeBarcodeValue(productItem.barcode || productItem.sku || '000000', 'CODE128');
     return (
       <div
         className="bg-white border border-slate-400 rounded shadow-xs select-none overflow-hidden touch-none relative transition-transform duration-75"
         style={{ width: previewW, height: previewH }}
       >
+        <LabelRasterPreview
+          options={labelOptionsFor(productItem)}
+          widthMm={effLabelWidth}
+          heightMm={effLabelHeight}
+          scale={previewScale}
+        />
+        {printableMm < effLabelWidth && (
+          <div
+            className="absolute top-0 bottom-0 w-px border-l border-dashed border-slate-400/70 pointer-events-none"
+            style={{ left: printableMm * previewScale }}
+            title={`${printableMm}mm printable width`}
+          />
+        )}
+
         {/* Store Name Element */}
         {showStoreName && (
           <div
@@ -566,12 +580,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
             onPointerUp={handlePointerUp}
             title={`Store Name (${effElemW('store').toFixed(1)}×${effElemH('store').toFixed(1)}mm)`}
           >
-            <span
-              className="font-extrabold uppercase text-slate-800 truncate w-full text-center pointer-events-none"
-              style={{ fontSize: Math.max(6, Math.min(28, effElemH('store') * previewScale * 0.75)) }}
-            >
-              {storeName || businessName || 'My Store'}
-            </span>
             <div
               className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
               onPointerDown={(e) => handlePointerDown(e, 'store', 'resize-e')}
@@ -611,12 +619,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
             onPointerUp={handlePointerUp}
             title={`Product Title (${effElemW('product').toFixed(1)}×${effElemH('product').toFixed(1)}mm)`}
           >
-            <p
-              className="font-extrabold text-slate-900 leading-tight line-clamp-2 w-full text-center pointer-events-none"
-              style={{ fontSize: Math.max(6, Math.min(24, effElemH('product') * previewScale * 0.6)) }}
-            >
-              {productItem.name}
-            </p>
             <div
               className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
               onPointerDown={(e) => handlePointerDown(e, 'product', 'resize-e')}
@@ -655,23 +657,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
           onPointerUp={handlePointerUp}
           title={`Barcode CODE128 (${effBarcodeWidth.toFixed(1)}×${effBarcodeHeight.toFixed(1)}mm)`}
         >
-          <div className="w-full h-full flex flex-col items-center justify-between overflow-hidden pointer-events-none min-h-0">
-            <BarcodeSVG
-              value={codeVal}
-              height={Math.max(10, Math.round(effBarcodeHeight * previewScale - (showCodeText ? 10 : 0)))}
-              showValue={false}
-              className="w-full flex-1 min-h-0"
-            />
-            {showCodeText && (
-              <div
-                className="font-mono font-bold text-slate-900 text-center truncate w-full shrink-0 leading-tight mt-0.5"
-                style={{ fontSize: Math.max(6, Math.min(14, effBarcodeHeight * previewScale * 0.22)) }}
-              >
-                {codeVal}
-              </div>
-            )}
-          </div>
-
           <div
             className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 hover:opacity-100 z-10 touch-none"
             onPointerDown={(e) => handlePointerDown(e, 'barcode', 'resize-e')}
@@ -710,12 +695,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
             onPointerUp={handlePointerUp}
             title={`Price Tag (${effElemW('price').toFixed(1)}×${effElemH('price').toFixed(1)}mm)`}
           >
-            <span
-              className="font-extrabold font-mono text-slate-900 px-1 truncate pointer-events-none"
-              style={{ fontSize: Math.max(6, Math.min(26, effElemH('price') * previewScale * 0.75)) }}
-            >
-              {productItem.price.toLocaleString()} {currencySymbol}
-            </span>
             <div
               className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-5 bg-slate-900 border border-white rounded-2xs cursor-ew-resize opacity-90 sm:opacity-0 sm:group-hover:opacity-100 z-10 touch-none"
               onPointerDown={(e) => handlePointerDown(e, 'price', 'resize-e')}

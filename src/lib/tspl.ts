@@ -187,7 +187,38 @@ function sizeCommands(
   ];
 }
 
-function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
+export interface LabelRasterResult {
+  widthMm: number;
+  heightMm: number;
+  labelWidthDots: number;
+  heightDots: number;
+  paperWidthDots: number;
+  offsetDots: number;
+  dotsPerMm: number;
+  image: PositionedRasterImage | null;
+  barcodeCommand: string;
+}
+
+function clampRasterWidth(
+  image: PositionedRasterImage,
+  offsetDots: number,
+  paperWidthDots: number,
+): PositionedRasterImage | null {
+  const available = paperWidthDots - offsetDots - image.xDots;
+  const maxBytes = Math.floor(available / 8);
+  if (maxBytes <= 0) return null;
+  if (image.widthBytes <= maxBytes) return image;
+
+  const widthDots = maxBytes * 8;
+  const data = new Uint8Array(maxBytes * image.heightDots);
+  for (let y = 0; y < image.heightDots; y++) {
+    const start = y * image.widthBytes;
+    data.set(image.data.subarray(start, start + maxBytes), y * maxBytes);
+  }
+  return { ...image, widthDots, widthBytes: maxBytes, data };
+}
+
+export function buildLabelRaster(opts: TsplLabelOptions): LabelRasterResult {
   const {
     storeName = '',
     productName = '',
@@ -203,21 +234,18 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
     labelHeightMm = 30,
     barcodeType = 'CODE128',
     barcodeHeightMm = 10,
-    paperMode = 'sticker',
-    labelGapMm = 3,
     labelOffsetMm = 0,
     layout,
-    copies = 1,
     dotsPerMm = DEFAULT_DOTS_PER_MM,
   } = opts;
 
-  if (!canRasterizeText()) return null;
-
   const widthMm = Math.max(5, Math.min(labelWidthMm, paperWidthMm));
+  const heightMm = Math.max(5, labelHeightMm);
   const widthDots = Math.max(dots(widthMm, dotsPerMm), 8);
-  const heightDots = Math.max(dots(Math.max(5, labelHeightMm), dotsPerMm), 8);
+  const heightDots = Math.max(dots(heightMm, dotsPerMm), 8);
   const priceValue = priceText(price, currencySymbol);
   const offsetDots = dots(Math.max(0, labelOffsetMm), dotsPerMm);
+  const paperWidthDots = dots(widthMm + Math.max(0, labelOffsetMm), dotsPerMm);
   const barcodeHeightDots = Math.max(dots(barcodeHeightMm, dotsPerMm), 20);
   const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
   const barcodeModules = estimateBarcodeModules(barcodeData, barcodeType);
@@ -371,18 +399,37 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   }
 
   const layer = renderTextLayer(runs, widthDots, heightDots, bars);
-  const image = layer ? cropRaster(layer) : null;
+  const cropped = layer ? cropRaster(layer) : null;
+  const image = cropped ? clampRasterWidth(cropped, offsetDots, paperWidthDots) : null;
+
+  return {
+    widthMm,
+    heightMm,
+    labelWidthDots: widthDots,
+    heightDots,
+    paperWidthDots,
+    offsetDots,
+    dotsPerMm,
+    image,
+    barcodeCommand,
+  };
+}
+
+function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
+  const raster = buildLabelRaster(opts);
+  const image = raster.image;
   if (!image) return null;
 
+  const { paperMode = 'sticker', labelGapMm = 3, labelOffsetMm = 0, copies = 1 } = opts;
   const bitmapData = invertForTspl(image);
   const copyCount = Math.max(1, Math.min(Math.floor(copies) || 1, 999));
   const parts: Array<string | Uint8Array> = [
-    `${sizeCommands(widthMm, Math.max(5, labelHeightMm), paperMode, labelGapMm, labelOffsetMm).join('\r\n')}\r\n`,
-    `BITMAP ${image.xDots + offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+    `${sizeCommands(raster.widthMm, raster.heightMm, paperMode, labelGapMm, labelOffsetMm).join('\r\n')}\r\n`,
+    `BITMAP ${image.xDots + raster.offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
     bitmapData,
     '\r\n',
   ];
-  if (barcodeCommand) parts.push(`${barcodeCommand}\r\n`);
+  if (raster.barcodeCommand) parts.push(`${raster.barcodeCommand}\r\n`);
   parts.push(`PRINT 1,${copyCount}\r\n`);
   return concatParts(parts);
 }
