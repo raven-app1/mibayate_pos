@@ -21,22 +21,22 @@ export interface TsplLabelOptions extends ThermalLabelOptions {
   dotsPerMm?: number;
 }
 
-const DEFAULT_DOTS_PER_MM = 12;
+const DEFAULT_DOTS_PER_MM = 8;
 
 const FONT_WIDTH: Record<string, number> = {
-  '1': 12,
-  '2': 18,
-  '3': 24,
-  '4': 36,
-  '5': 48,
+  '1': 8,
+  '2': 12,
+  '3': 16,
+  '4': 24,
+  '5': 32,
 };
 
 const FONT_HEIGHT: Record<string, number> = {
-  '1': 18,
-  '2': 30,
-  '3': 36,
-  '4': 48,
-  '5': 72,
+  '1': 12,
+  '2': 20,
+  '3': 24,
+  '4': 32,
+  '5': 48,
 };
 
 function encode(value: string): Uint8Array {
@@ -576,16 +576,16 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
 export function testPrintTspl(
   storeName: string,
-  labelWidthMm = 50,
-  labelHeightMm = 30,
-  labelGapMm = 3,
-  labelOffsetMm = 0,
+  labelWidthMm = 40,
+  labelHeightMm = 20,
+  labelGapMm = 1,
+  labelOffsetMm = 32,
 ): Uint8Array {
   const widthMm = Math.max(5, labelWidthMm);
   const heightMm = Math.max(5, labelHeightMm);
   const offsetDots = dots(Math.max(0, labelOffsetMm), DEFAULT_DOTS_PER_MM);
   const maxChars = Math.max(1, Math.floor(dots(widthMm - 4, DEFAULT_DOTS_PER_MM) / FONT_WIDTH['3']));
-  const store = truncate(storeName || 'My Store', maxChars);
+  const store = truncate(storeName || 'Mibayate', maxChars);
 
   if (canRasterizeText() && hasNonAscii(store)) {
     const widthDots = dots(widthMm, DEFAULT_DOTS_PER_MM);

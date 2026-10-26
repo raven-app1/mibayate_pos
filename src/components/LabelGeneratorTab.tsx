@@ -179,10 +179,10 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
   const handleZoomOut = () => setZoomFactor(prev => Math.max(0.5, Math.round((prev - 0.25) * 100) / 100));
   const handleResetZoom = () => setZoomFactor(1);
 
-  const effPaperWidth = clamp(parseMm(config.paperWidth) || 80, 15, 300);
+  const effPaperWidth = clamp(parseMm(config.paperWidth) || 72, 15, 300);
   const printableMm = getPrintableMm(effPaperWidth);
   const effLabelWidth = clamp(parseMm(config.labelWidth) || effPaperWidth, 5, effPaperWidth);
-  const effLabelHeight = clamp(parseMm(config.labelHeight) || 30, 8, 300);
+  const effLabelHeight = clamp(parseMm(config.labelHeight) || 20, 8, 300);
 
   const effElemX = (k: 'store' | 'product' | 'barcode' | 'price') =>
     clamp(parseMm(config.layoutXY[k].x) || 0, 0, Math.max(0, effLabelWidth - 5));
@@ -286,7 +286,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
-    dotsPerMm: (config.dpi ?? 300) === 203 ? 8 : 12,
+    dotsPerMm: config.dpi === 300 ? 12 : 8,
     layout: layoutForPrint,
   });
 
@@ -698,17 +698,17 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => updateConfig(p => ({ ...p, dpi: 300 }))}
-                    className={segBtn((config.dpi ?? 300) === 300)}
+                    onClick={() => updateConfig(p => ({ ...p, dpi: 203 }))}
+                    className={segBtn((config.dpi ?? 203) === 203)}
                   >
-                    300 DPI (12 dots/mm)
+                    203 DPI (8 dots/mm)
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateConfig(p => ({ ...p, dpi: 203 }))}
-                    className={segBtn(config.dpi === 203)}
+                    onClick={() => updateConfig(p => ({ ...p, dpi: 300 }))}
+                    className={segBtn(config.dpi === 300)}
                   >
-                    203 DPI (8 dots/mm)
+                    300 DPI (12 dots/mm)
                   </button>
                 </div>
               </div>

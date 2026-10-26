@@ -115,10 +115,10 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
 
   if (!isOpen || !product) return null;
 
-  const effPaperWidth = clamp(parseMm(config.paperWidth) || 80, 15, 300);
+  const effPaperWidth = clamp(parseMm(config.paperWidth) || 72, 15, 300);
   const printableMm = getPrintableMm(effPaperWidth);
   const effLabelWidth = clamp(parseMm(config.labelWidth) || effPaperWidth, 5, effPaperWidth);
-  const effLabelHeight = clamp(parseMm(config.labelHeight) || 30, 8, 300);
+  const effLabelHeight = clamp(parseMm(config.labelHeight) || 20, 8, 300);
 
   const effElemX = (k: 'store' | 'product' | 'barcode' | 'price') =>
     clamp(parseMm(config.layoutXY[k].x) || 0, 0, Math.max(0, effLabelWidth - 5));
@@ -175,7 +175,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
-    dotsPerMm: (config.dpi ?? 300) === 203 ? 8 : 12,
+    dotsPerMm: config.dpi === 300 ? 12 : 8,
     layout: layoutForPrint,
   };
 

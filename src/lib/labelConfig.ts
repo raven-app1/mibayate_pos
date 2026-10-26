@@ -2,35 +2,35 @@ import { LabelConfig } from '../types';
 
 export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   paperMode: 'sticker',
-  paperWidth: '80',
-  labelWidth: '80',
-  labelHeight: '30',
-  barcodeWidth: '76',
+  paperWidth: '72',
+  labelWidth: '40',
+  labelHeight: '20',
+  barcodeWidth: '40',
   barcodeHeight: '10',
   barcodeType: 'CODE128',
   cutMode: 'off',
-  labelGap: '3',
+  labelGap: '1',
   feedOffset: '0',
   labelAlign: 'right',
   labelOffsetX: '0',
   showStoreName: true,
   showProductName: true,
-  showPrice: true,
+  showPrice: false,
   showCodeText: true,
-  storeName: 'My Retail Store',
+  storeName: 'Mibayate',
   customLayout: true,
   layoutXY: {
-    store: { x: '2', y: '1', w: '76', h: '4' },
-    product: { x: '2', y: '6', w: '76', h: '6' },
-    barcode: { x: '2', y: '13', w: '76', h: '10' },
-    price: { x: '2', y: '24', w: '76', h: '5' },
+    store: { x: '0', y: '1', w: '40', h: '2' },
+    product: { x: '0', y: '3', w: '40', h: '2' },
+    barcode: { x: '0', y: '6', w: '40', h: '10' },
+    price: { x: '0', y: '16', w: '40', h: '3' },
   },
   fontSize: {
-    store: 1,
-    product: 1,
+    store: 2,
+    product: 2,
     price: 2,
   },
-  dpi: 300,
+  dpi: 203,
 };
 
 const STORAGE_KEY = 'retail_shop_label_config';
@@ -43,10 +43,10 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
       return {
         ...DEFAULT_LABEL_CONFIG,
         ...parsed,
-        dpi: parsed.dpi === 203 ? 203 : 300,
+        dpi: parsed.dpi === 300 ? 300 : 203,
         labelAlign: parsed.labelAlign === 'left' || parsed.labelAlign === 'center' ? parsed.labelAlign : 'right',
         labelOffsetX: typeof parsed.labelOffsetX === 'string' ? parsed.labelOffsetX : '0',
-        storeName: parsed.storeName || defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
+        storeName: (parsed.storeName && parsed.storeName !== 'My Retail Store') ? parsed.storeName : (defaultStoreName || DEFAULT_LABEL_CONFIG.storeName),
         layoutXY: {
           ...DEFAULT_LABEL_CONFIG.layoutXY,
           ...(parsed.layoutXY || {}),
@@ -58,10 +58,12 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
       };
     }
   } catch (err) {}
-  return {
+  const initial: LabelConfig = {
     ...DEFAULT_LABEL_CONFIG,
     storeName: defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
   };
+  saveLabelConfig(initial);
+  return initial;
 }
 
 export function computeLabelOffsetMm(config: {
@@ -70,7 +72,7 @@ export function computeLabelOffsetMm(config: {
   labelAlign?: 'left' | 'center' | 'right';
   labelOffsetX?: string;
 }): number {
-  const paperMm = parseFloat(config.paperWidth) || 80;
+  const paperMm = parseFloat(config.paperWidth) || 72;
   const labelMm = Math.min(parseFloat(config.labelWidth) || paperMm, paperMm);
   const align = config.labelAlign ?? 'right';
   const base = align === 'left' ? 0 : align === 'center' ? (paperMm - labelMm) / 2 : paperMm - labelMm;

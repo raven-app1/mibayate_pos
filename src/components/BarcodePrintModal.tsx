@@ -177,10 +177,10 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const [pairedDevices, setPairedDevices] = useState<printerBridge.PairedPrinter[]>([]);
   const [selectedAddress, setSelectedAddress] = useState('');
 
-  const effPaperWidth = clamp(parseMm(paperWidth) || 80, 15, 300);
+  const effPaperWidth = clamp(parseMm(paperWidth) || 72, 15, 300);
   const printableMm = getPrintableMm(effPaperWidth);
   const effLabelWidth = clamp(parseMm(labelWidth) || effPaperWidth, 5, effPaperWidth);
-  const effLabelHeight = clamp(parseMm(labelHeight) || 30, 8, 300);
+  const effLabelHeight = clamp(parseMm(labelHeight) || 20, 8, 300);
 
   const effElemX = (k: 'store' | 'product' | 'barcode' | 'price') =>
     clamp(parseMm(layoutXY[k].x) || 0, 0, Math.max(0, effLabelWidth - 5));
@@ -349,7 +349,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
-    dotsPerMm: 12,
+    dotsPerMm: 8,
     layout: layoutForPrint,
   });
 

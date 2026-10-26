@@ -132,10 +132,10 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
 
       if (role === 'barcode') {
         await printerBridge.send(testPrintTspl(
-          storeName || cfg.storeName || 'My Store',
-          parseFloat(cfg.labelWidth) || 50,
-          parseFloat(cfg.labelHeight) || 30,
-          parseFloat(cfg.labelGap) || 3,
+          storeName || cfg.storeName || 'Mibayate',
+          parseFloat(cfg.labelWidth) || 40,
+          parseFloat(cfg.labelHeight) || 20,
+          parseFloat(cfg.labelGap) || 1,
           computeLabelOffsetMm(cfg),
         ));
       } else {
