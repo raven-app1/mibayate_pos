@@ -6,7 +6,7 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   labelWidth: '80',
   labelHeight: '30',
   barcodeWidth: '76',
-  barcodeHeight: '12',
+  barcodeHeight: '10',
   barcodeType: 'CODE128',
   cutMode: 'off',
   labelGap: '3',
@@ -20,10 +20,10 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   storeName: 'My Retail Store',
   customLayout: true,
   layoutXY: {
-    store: { x: '4', y: '1', w: '72', h: '4' },
-    product: { x: '4', y: '6', w: '72', h: '6' },
-    barcode: { x: '4', y: '13', w: '72', h: '12' },
-    price: { x: '4', y: '24', w: '72', h: '5' },
+    store: { x: '2', y: '1', w: '76', h: '4' },
+    product: { x: '2', y: '6', w: '76', h: '6' },
+    barcode: { x: '2', y: '13', w: '76', h: '10' },
+    price: { x: '2', y: '24', w: '76', h: '5' },
   },
   fontSize: {
     store: 1,
