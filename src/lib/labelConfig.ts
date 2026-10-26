@@ -77,6 +77,71 @@ export function computeLabelOffsetMm(config: {
   return Math.max(0, Math.round((base + nudge) * 10) / 10);
 }
 
+export function positiveMm(value: string | undefined): number | undefined {
+  if (value === undefined || value === '') return undefined;
+  const n = parseFloat(value);
+  return isFinite(n) ? n : undefined;
+}
+
+export function rescaleLabelLayout(
+  layoutXY: LabelConfig['layoutXY'],
+  barcodeWidth: string | undefined,
+  barcodeHeight: string | undefined,
+  prevWidthMm: number,
+  prevHeightMm: number,
+  nextWidthMm: number,
+  nextHeightMm: number,
+): { layoutXY: LabelConfig['layoutXY']; barcodeWidth?: string; barcodeHeight?: string } {
+  const ratioX = prevWidthMm > 0 && nextWidthMm > 0 ? nextWidthMm / prevWidthMm : 1;
+  const ratioY = prevHeightMm > 0 && nextHeightMm > 0 ? nextHeightMm / prevHeightMm : 1;
+  if (ratioX === 1 && ratioY === 1) return { layoutXY, barcodeWidth, barcodeHeight };
+
+  const scale = (value: string | undefined, ratio: number): string | undefined => {
+    const n = positiveMm(value);
+    if (n === undefined) return value;
+    return String(Math.round(n * ratio * 1000) / 1000);
+  };
+
+  const nextLayoutXY = { ...layoutXY };
+  (['store', 'product', 'barcode', 'price'] as const).forEach((k) => {
+    nextLayoutXY[k] = {
+      ...nextLayoutXY[k],
+      x: scale(nextLayoutXY[k].x, ratioX),
+      y: scale(nextLayoutXY[k].y, ratioY),
+      w: scale(nextLayoutXY[k].w, ratioX),
+      h: scale(nextLayoutXY[k].h, ratioY),
+    };
+  });
+
+  return {
+    layoutXY: nextLayoutXY,
+    barcodeWidth: scale(barcodeWidth, ratioX),
+    barcodeHeight: scale(barcodeHeight, ratioY),
+  };
+}
+
+export function withLabelSize(
+  config: LabelConfig,
+  labelWidth: string,
+  labelHeight: string,
+  fallbackWidthMm = 80,
+  fallbackHeightMm = 30,
+): LabelConfig {
+  const prevW = positiveMm(config.labelWidth) ?? fallbackWidthMm;
+  const prevH = positiveMm(config.labelHeight) ?? fallbackHeightMm;
+  const nextW = positiveMm(labelWidth) ?? fallbackWidthMm;
+  const nextH = positiveMm(labelHeight) ?? fallbackHeightMm;
+  const scaled = rescaleLabelLayout(config.layoutXY, config.barcodeWidth, config.barcodeHeight, prevW, prevH, nextW, nextH);
+  return {
+    ...config,
+    layoutXY: scaled.layoutXY,
+    barcodeWidth: scaled.barcodeWidth ?? config.barcodeWidth,
+    barcodeHeight: scaled.barcodeHeight ?? config.barcodeHeight,
+    labelWidth,
+    labelHeight,
+  };
+}
+
 export function saveLabelConfig(config: LabelConfig): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));

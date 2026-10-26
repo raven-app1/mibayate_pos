@@ -10,7 +10,7 @@ import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
+import { loadLabelConfig, saveLabelConfig, computeLabelOffsetMm, rescaleLabelLayout, positiveMm } from '../lib/labelConfig';
 
 interface BarcodePrintModalProps {
   products: Product[];
@@ -204,6 +204,29 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const effLabelGap = clamp(parseMm(labelGap) || 3, 2, 10);
   const effFeedOffset = clamp(parseMm(feedOffset) || 0, -10, 10);
   const effLabelOffsetMm = computeLabelOffsetMm({ paperWidth, labelWidth, labelAlign, labelOffsetX });
+
+  const handleLabelWidthChange = useCallback((value: string) => {
+    const prevW = positiveMm(labelWidth) ?? effPaperWidth;
+    const prevH = positiveMm(labelHeight) ?? 30;
+    const nextW = positiveMm(value) ?? effPaperWidth;
+    const scaled = rescaleLabelLayout(layoutXY, barcodeWidth, barcodeHeight, prevW, prevH, nextW, prevH);
+    setLayoutXY(scaled.layoutXY);
+    setBarcodeWidth(scaled.barcodeWidth ?? barcodeWidth);
+    setBarcodeHeight(scaled.barcodeHeight ?? barcodeHeight);
+    setLabelWidth(value);
+  }, [labelWidth, labelHeight, layoutXY, barcodeWidth, barcodeHeight, effPaperWidth]);
+
+  const handleLabelHeightChange = useCallback((value: string) => {
+    const prevW = positiveMm(labelWidth) ?? effPaperWidth;
+    const prevH = positiveMm(labelHeight) ?? 30;
+    const nextH = positiveMm(value) ?? 30;
+    const scaled = rescaleLabelLayout(layoutXY, barcodeWidth, barcodeHeight, prevW, prevH, prevW, nextH);
+    setLayoutXY(scaled.layoutXY);
+    setBarcodeWidth(scaled.barcodeWidth ?? barcodeWidth);
+    setBarcodeHeight(scaled.barcodeHeight ?? barcodeHeight);
+    setLabelHeight(value);
+  }, [labelWidth, labelHeight, layoutXY, barcodeWidth, barcodeHeight, effPaperWidth]);
+
   const [viewportSize, setViewportSize] = useState({
     w: typeof window !== 'undefined' ? window.innerWidth : 375,
     h: typeof window !== 'undefined' ? window.innerHeight : 667,
@@ -655,14 +678,14 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                      Label W (mm)
                    </label>
                    <input type="number" min={5} max={300} value={labelWidth}
-                     onChange={e => setLabelWidth(e.target.value)} className={numInputClass} />
+                     onChange={e => handleLabelWidthChange(e.target.value)} className={numInputClass} />
                  </div>
                  <div>
                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                      Label H (mm)
                    </label>
                    <input type="number" min={8} max={300} value={labelHeight}
-                     onChange={e => setLabelHeight(e.target.value)} className={numInputClass} />
+                     onChange={e => handleLabelHeightChange(e.target.value)} className={numInputClass} />
                  </div>
                </div>
 
