@@ -6,6 +6,7 @@ import {
 import {
   PositionedRasterImage,
   RasterBar,
+  RasterImage,
   RasterTextRun,
   canRasterizeText,
   cropRaster,
@@ -187,7 +188,22 @@ function sizeCommands(
   ];
 }
 
-function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
+interface PreparedRasterLabel {
+  layer: RasterImage;
+  widthMm: number;
+  heightMm: number;
+  offsetDots: number;
+  barcodeCommand: string;
+}
+
+export interface LabelRasterPreview {
+  widthDots: number;
+  heightDots: number;
+  widthBytes: number;
+  data: Uint8Array;
+}
+
+function prepareRasterLabel(opts: TsplLabelOptions): PreparedRasterLabel | null {
   const {
     storeName = '',
     productName = '',
@@ -203,11 +219,8 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
     labelHeightMm = 30,
     barcodeType = 'CODE128',
     barcodeHeightMm = 10,
-    paperMode = 'sticker',
-    labelGapMm = 3,
     labelOffsetMm = 0,
     layout,
-    copies = 1,
     dotsPerMm = DEFAULT_DOTS_PER_MM,
   } = opts;
 
@@ -371,18 +384,50 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   }
 
   const layer = renderTextLayer(runs, widthDots, heightDots, bars);
-  const image = layer ? cropRaster(layer) : null;
+  if (!layer) return null;
+
+  return {
+    layer,
+    widthMm,
+    heightMm: Math.max(5, labelHeightMm),
+    offsetDots,
+    barcodeCommand,
+  };
+}
+
+export function renderLabelRaster(opts: TsplLabelOptions): LabelRasterPreview | null {
+  const prepared = prepareRasterLabel(opts);
+  if (!prepared) return null;
+  return {
+    widthDots: prepared.layer.widthDots,
+    heightDots: prepared.layer.heightDots,
+    widthBytes: prepared.layer.widthBytes,
+    data: prepared.layer.data,
+  };
+}
+
+function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
+  const prepared = prepareRasterLabel(opts);
+  if (!prepared) return null;
+
+  const image = cropRaster(prepared.layer);
   if (!image) return null;
 
   const bitmapData = invertForTspl(image);
-  const copyCount = Math.max(1, Math.min(Math.floor(copies) || 1, 999));
+  const copyCount = Math.max(1, Math.min(Math.floor(opts.copies ?? 1) || 1, 999));
   const parts: Array<string | Uint8Array> = [
-    `${sizeCommands(widthMm, Math.max(5, labelHeightMm), paperMode, labelGapMm, labelOffsetMm).join('\r\n')}\r\n`,
-    `BITMAP ${image.xDots + offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+    `${sizeCommands(
+      prepared.widthMm,
+      prepared.heightMm,
+      opts.paperMode ?? 'sticker',
+      opts.labelGapMm ?? 3,
+      opts.labelOffsetMm ?? 0,
+    ).join('\r\n')}\r\n`,
+    `BITMAP ${image.xDots + prepared.offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
     bitmapData,
     '\r\n',
   ];
-  if (barcodeCommand) parts.push(`${barcodeCommand}\r\n`);
+  if (prepared.barcodeCommand) parts.push(`${prepared.barcodeCommand}\r\n`);
   parts.push(`PRINT 1,${copyCount}\r\n`);
   return concatParts(parts);
 }

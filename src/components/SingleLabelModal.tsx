@@ -4,7 +4,7 @@ import {
   Minus, Plus, Settings, Ruler, Tag,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
-import BarcodeSVG from './BarcodeSVG';
+import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
 import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
@@ -327,98 +327,12 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
               Configured Label Preview ({effLabelWidth.toFixed(0)} × {effLabelHeight.toFixed(0)}mm)
             </p>
 
-            <div
-              className="bg-white border border-slate-400 rounded shadow-xs select-none overflow-hidden relative"
-              style={{ width: previewW, height: previewH }}
-            >
-              {/* Store Name Element */}
-              {config.showStoreName && (
-                <div
-                  className="absolute flex items-center justify-center p-0.5"
-                  style={{
-                    left: effElemX('store') * previewScale,
-                    top: effElemY('store') * previewScale,
-                    width: effElemW('store') * previewScale,
-                    height: effElemH('store') * previewScale,
-                  }}
-                >
-                  <span
-                    className="font-extrabold uppercase text-slate-800 truncate w-full text-center pointer-events-none"
-                    style={{ fontSize: Math.max(6, Math.min(26, effElemH('store') * previewScale * 0.75)) }}
-                  >
-                    {config.storeName || businessName || 'My Store'}
-                  </span>
-                </div>
-              )}
-
-              {/* Product Title Element */}
-              {config.showProductName && (
-                <div
-                  className="absolute flex items-center justify-center p-0.5"
-                  style={{
-                    left: effElemX('product') * previewScale,
-                    top: effElemY('product') * previewScale,
-                    width: effElemW('product') * previewScale,
-                    height: effElemH('product') * previewScale,
-                  }}
-                >
-                  <p
-                    className="font-extrabold text-slate-900 leading-tight line-clamp-2 w-full text-center pointer-events-none"
-                    style={{ fontSize: Math.max(6, Math.min(24, effElemH('product') * previewScale * 0.6)) }}
-                  >
-                    {product.name}
-                  </p>
-                </div>
-              )}
-
-              {/* Barcode Box Element */}
-              <div
-                className="absolute flex flex-col items-center justify-between p-0.5 overflow-hidden"
-                style={{
-                  left: effBarcodeX * previewScale,
-                  top: effBarcodeY * previewScale,
-                  width: effBarcodeWidth * previewScale,
-                  height: effBarcodeHeight * previewScale,
-                }}
-              >
-                <div className="w-full h-full flex flex-col items-center justify-between overflow-hidden pointer-events-none min-h-0">
-                  <BarcodeSVG
-                    value={codeVal}
-                    height={Math.max(10, Math.round(effBarcodeHeight * previewScale - (config.showCodeText ? 10 : 0)))}
-                    showValue={false}
-                    className="w-full flex-1 min-h-0"
-                  />
-                  {config.showCodeText && (
-                    <div
-                      className="font-mono font-bold text-slate-900 text-center truncate w-full shrink-0 leading-tight mt-0.5"
-                      style={{ fontSize: Math.max(6, Math.min(14, effBarcodeHeight * previewScale * 0.22)) }}
-                    >
-                      {codeVal}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Price Box Element */}
-              {config.showPrice && (
-                <div
-                  className="absolute flex items-center justify-center"
-                  style={{
-                    left: effElemX('price') * previewScale,
-                    top: effElemY('price') * previewScale,
-                    width: effElemW('price') * previewScale,
-                    height: effElemH('price') * previewScale,
-                  }}
-                >
-                  <span
-                    className="font-extrabold font-mono text-slate-900 truncate pointer-events-none"
-                    style={{ fontSize: Math.max(6, Math.min(26, effElemH('price') * previewScale * 0.75)) }}
-                  >
-                    {product.price.toLocaleString()} {currencySymbol}
-                  </span>
-                </div>
-              )}
-            </div>
+            <LabelRasterPreview
+              options={labelOptions}
+              width={previewW}
+              height={previewH}
+              className="border border-slate-400 rounded shadow-xs"
+            />
 
             <div className="mt-3 flex items-center justify-between w-full text-[11px] text-slate-500 font-medium">
               <span>SKU / Barcode: <strong className="font-mono text-slate-800">{codeVal}</strong></span>
