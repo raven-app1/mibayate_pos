@@ -11,7 +11,7 @@ import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm, withLabelSize } from '../lib/labelConfig';
+import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
 
 interface LabelGeneratorTabProps {
   products: Product[];
@@ -683,7 +683,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </label>
                   <input
                     type="number" min={5} max={300} value={config.labelWidth}
-                    onChange={e => updateConfig(p => withLabelSize(p, e.target.value, p.labelHeight, effPaperWidth, effLabelHeight))}
+                    onChange={e => updateConfig(p => ({ ...p, labelWidth: e.target.value }))}
                     className={numInputClass}
                   />
                 </div>
@@ -693,7 +693,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </label>
                   <input
                     type="number" min={8} max={300} value={config.labelHeight}
-                    onChange={e => updateConfig(p => withLabelSize(p, p.labelWidth, e.target.value, effPaperWidth, effLabelHeight))}
+                    onChange={e => updateConfig(p => ({ ...p, labelHeight: e.target.value }))}
                     className={numInputClass}
                   />
                 </div>
