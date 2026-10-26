@@ -21,22 +21,22 @@ export interface TsplLabelOptions extends ThermalLabelOptions {
   dotsPerMm?: number;
 }
 
-const DEFAULT_DOTS_PER_MM = 8;
+const DEFAULT_DOTS_PER_MM = 12;
 
 const FONT_WIDTH: Record<string, number> = {
-  '1': 8,
-  '2': 12,
-  '3': 16,
-  '4': 24,
-  '5': 32,
+  '1': 12,
+  '2': 18,
+  '3': 24,
+  '4': 36,
+  '5': 48,
 };
 
 const FONT_HEIGHT: Record<string, number> = {
-  '1': 12,
-  '2': 20,
-  '3': 24,
-  '4': 32,
-  '5': 48,
+  '1': 18,
+  '2': 30,
+  '3': 36,
+  '4': 48,
+  '5': 72,
 };
 
 function encode(value: string): Uint8Array {
@@ -254,7 +254,7 @@ function prepareRasterLabel(opts: TsplLabelOptions): PreparedRasterLabel | null 
         yDots: dots(storePos.yMm, dotsPerMm),
         widthDots: Math.max(dots(storePos.widthMm ?? (widthMm - storePos.xMm), dotsPerMm), 20),
         heightDots: boxHeightDots || undefined,
-        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * 0.75)) : FONT_HEIGHT['3'] * size,
+        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.88 : 0.62))) : FONT_HEIGHT['3'] * size,
         bold: true,
         align: 'center',
         maxLines: 1,
@@ -272,7 +272,7 @@ function prepareRasterLabel(opts: TsplLabelOptions): PreparedRasterLabel | null 
         yDots: dots(productPos.yMm, dotsPerMm),
         widthDots: Math.max(dots(productPos.widthMm ?? (widthMm - productPos.xMm), dotsPerMm), 20),
         heightDots: boxHeightDots,
-        px: productPos.heightMm ? Math.max(9, Math.round(boxHeightDots * 0.6)) : FONT_HEIGHT['2'] * size,
+        px: productPos.heightMm ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.68 : 0.48))) : FONT_HEIGHT['2'] * size,
         bold: true,
         align: 'center',
         maxLines: 2,
@@ -288,7 +288,7 @@ function prepareRasterLabel(opts: TsplLabelOptions): PreparedRasterLabel | null 
         yDots: dots(pricePos.yMm, dotsPerMm),
         widthDots: Math.max(dots(pricePos.widthMm ?? (widthMm - pricePos.xMm), dotsPerMm), 20),
         heightDots: boxHeightDots || undefined,
-        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * 0.75)) : FONT_HEIGHT['3'] * size,
+        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.88 : 0.62))) : FONT_HEIGHT['3'] * size,
         bold: true,
         align: 'center',
         maxLines: 1,

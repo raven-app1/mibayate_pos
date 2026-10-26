@@ -4,6 +4,7 @@ import {
   Tag, Bluetooth, BluetoothOff, Loader2, CheckCircle2, AlertCircle,
   Minus, Plus, Ruler, Scissors, RefreshCw, Save, Layers,
   Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
+  SlidersHorizontal, Type, Store, DollarSign, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
@@ -62,6 +63,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
   const [btError, setBtError] = useState<string | null>(null);
   const [pairedDevices, setPairedDevices] = useState<printerBridge.PairedPrinter[]>([]);
   const [selectedAddress, setSelectedAddress] = useState('');
+  const [showPositionControls, setShowPositionControls] = useState(false);
 
   useEffect(() => {
     const last = printerBridge.getLastPrinter();
@@ -130,6 +132,22 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     };
     setConfig(fresh);
     saveLabelConfig(fresh);
+  };
+
+  const handleResetElementSizes = () => {
+    updateConfig(p => ({
+      ...p,
+      barcodeWidth: DEFAULT_LABEL_CONFIG.barcodeWidth,
+      barcodeHeight: DEFAULT_LABEL_CONFIG.barcodeHeight,
+      layoutXY: {
+        ...p.layoutXY,
+        store: { ...p.layoutXY.store, w: DEFAULT_LABEL_CONFIG.layoutXY.store.w, h: DEFAULT_LABEL_CONFIG.layoutXY.store.h },
+        product: { ...p.layoutXY.product, w: DEFAULT_LABEL_CONFIG.layoutXY.product.w, h: DEFAULT_LABEL_CONFIG.layoutXY.product.h },
+        barcode: { ...p.layoutXY.barcode, w: DEFAULT_LABEL_CONFIG.layoutXY.barcode.w, h: DEFAULT_LABEL_CONFIG.layoutXY.barcode.h },
+        price: { ...p.layoutXY.price, w: DEFAULT_LABEL_CONFIG.layoutXY.price.w, h: DEFAULT_LABEL_CONFIG.layoutXY.price.h },
+      },
+      fontSize: { ...DEFAULT_LABEL_CONFIG.fontSize },
+    }));
   };
 
   const handleConnectPrinter = useCallback(async () => {
@@ -268,6 +286,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
+    dotsPerMm: (config.dpi ?? 300) === 203 ? 8 : 12,
     layout: layoutForPrint,
   });
 
@@ -392,6 +411,12 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       active
         ? 'bg-black text-white border-black shadow-xs'
         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+    }`;
+  const miniSegBtn = (active: boolean) =>
+    `flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs transition-all text-center cursor-pointer ${
+      active
+        ? 'bg-black text-white border-black shadow-xs'
+        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
     }`;
 
   const renderCanvasCard = () => (
@@ -666,6 +691,28 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                  Print Resolution
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateConfig(p => ({ ...p, dpi: 300 }))}
+                    className={segBtn((config.dpi ?? 300) === 300)}
+                  >
+                    300 DPI (12 dots/mm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateConfig(p => ({ ...p, dpi: 203 }))}
+                    className={segBtn(config.dpi === 203)}
+                  >
+                    203 DPI (8 dots/mm)
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-2.5">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
@@ -834,6 +881,421 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 )}
               </div>
 
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <SlidersHorizontal className="w-5 h-5 text-gray-900" />
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">
+                    Element Sizing & Font Sizes
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Customize width, height, and font scale for each label section
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetElementSizes}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-black hover:bg-slate-100 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                title="Reset all element dimensions and font sizes to defaults"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Store className="w-4 h-4 text-slate-800" />
+                    <span className="font-bold text-xs text-slate-900">Store Name (Header)</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${config.showStoreName ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {config.showStoreName ? 'Active' : 'Hidden'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Width (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelWidth}
+                      value={config.layoutXY.store.w !== undefined ? config.layoutXY.store.w : effElemW('store').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, w: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Height (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelHeight}
+                      value={config.layoutXY.store.h !== undefined ? config.layoutXY.store.h : effElemH('store').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, h: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Font Size
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 1 } }))}
+                        className={miniSegBtn((config.fontSize?.store ?? 1) === 1)}
+                      >
+                        Normal (1x)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 2 } }))}
+                        className={miniSegBtn((config.fontSize?.store ?? 1) === 2)}
+                      >
+                        Large (2x)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showPositionControls && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelWidth - 1)}
+                        value={config.layoutXY.store.x ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, x: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelHeight - 1)}
+                        value={config.layoutXY.store.y ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, y: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-slate-800" />
+                    <span className="font-bold text-xs text-slate-900">Product Title</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${config.showProductName ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {config.showProductName ? 'Active' : 'Hidden'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Width (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelWidth}
+                      value={config.layoutXY.product.w !== undefined ? config.layoutXY.product.w : effElemW('product').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, w: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Height (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelHeight}
+                      value={config.layoutXY.product.h !== undefined ? config.layoutXY.product.h : effElemH('product').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, h: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Font Size
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 1 } }))}
+                        className={miniSegBtn((config.fontSize?.product ?? 1) === 1)}
+                      >
+                        Normal (1x)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 2 } }))}
+                        className={miniSegBtn((config.fontSize?.product ?? 1) === 2)}
+                      >
+                        Large (2x)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showPositionControls && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelWidth - 1)}
+                        value={config.layoutXY.product.x ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, x: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelHeight - 1)}
+                        value={config.layoutXY.product.y ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, y: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Type className="w-4 h-4 text-slate-800" />
+                    <span className="font-bold text-xs text-slate-900">Barcode Box</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-black text-white font-mono">
+                    CODE 128
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Barcode Width (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={10}
+                      max={effLabelWidth}
+                      value={config.barcodeWidth !== undefined ? config.barcodeWidth : effBarcodeWidth.toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        barcodeWidth: e.target.value,
+                        layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, w: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Barcode Height (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={4}
+                      max={effLabelHeight}
+                      value={config.barcodeHeight}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        barcodeHeight: e.target.value,
+                        layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, h: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                </div>
+
+                {showPositionControls && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelWidth - effBarcodeWidth)}
+                        value={config.layoutXY.barcode.x ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, x: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelHeight - effBarcodeHeight)}
+                        value={config.layoutXY.barcode.y ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, y: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-slate-800" />
+                    <span className="font-bold text-xs text-slate-900">Selling Price</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${config.showPrice ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {config.showPrice ? 'Active' : 'Hidden'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Width (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelWidth}
+                      value={config.layoutXY.price.w !== undefined ? config.layoutXY.price.w : effElemW('price').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, w: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Height (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step={0.5}
+                      min={1}
+                      max={effLabelHeight}
+                      value={config.layoutXY.price.h !== undefined ? config.layoutXY.price.h : effElemH('price').toFixed(1)}
+                      onChange={e => updateConfig(p => ({
+                        ...p,
+                        layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, h: e.target.value } }
+                      }))}
+                      className={numInputClass}
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Font Size
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 1 } }))}
+                        className={miniSegBtn((config.fontSize?.price ?? 2) === 1)}
+                      >
+                        Normal (1x)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 2 } }))}
+                        className={miniSegBtn((config.fontSize?.price ?? 2) === 2)}
+                      >
+                        Large (2x)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showPositionControls && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelWidth - 1)}
+                        value={config.layoutXY.price.x ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, x: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                      <input
+                        type="number"
+                        step={0.5}
+                        min={0}
+                        max={Math.max(0, effLabelHeight - 1)}
+                        value={config.layoutXY.price.y ?? ''}
+                        onChange={e => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, y: e.target.value } } }))}
+                        className={numInputClass}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-1 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowPositionControls(prev => !prev)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-black transition-colors cursor-pointer py-1 px-3 rounded-lg hover:bg-slate-100"
+                >
+                  {showPositionControls ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  <span>{showPositionControls ? 'Hide Position Offsets (X, Y)' : 'Adjust Position Offsets (X, Y)'}</span>
+                </button>
+              </div>
             </div>
           </div>
 

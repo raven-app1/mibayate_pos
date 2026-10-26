@@ -199,6 +199,7 @@ export interface LabelConfig {
     product: number;
     price: number;
   };
+  dpi?: 203 | 300;
   lastPrinterAddress?: string;
   lastPrinterName?: string;
 }

@@ -3,6 +3,7 @@ import {
   Printer, X, Search, CheckSquare, Square, Settings2,
   Tag, Bluetooth, BluetoothOff, Loader2, CheckCircle2, AlertCircle,
   Minus, Plus, Ruler, Scissors, Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
+  SlidersHorizontal, Store, Type, DollarSign, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
@@ -10,7 +11,7 @@ import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
+import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
 
 interface BarcodePrintModalProps {
   products: Product[];
@@ -79,6 +80,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   }>(initialConfig.layoutXY);
 
   const [fontSize, setFontSize] = useState<{ store: number; product: number; price: number }>(initialConfig.fontSize);
+  const [showPositionControls, setShowPositionControls] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -147,6 +149,22 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     setFontSize(next.fontSize);
     saveLabelConfig(next);
   }, [paperMode, paperWidth, labelWidth, labelHeight, barcodeWidth, barcodeHeight, cutMode, labelGap, feedOffset, labelAlign, labelOffsetX, showStoreName, showProductName, showPrice, showCodeText, storeName, layoutXY, fontSize, businessName]);
+
+  const handleResetElementSizes = () => {
+    updateConfig(p => ({
+      ...p,
+      barcodeWidth: DEFAULT_LABEL_CONFIG.barcodeWidth,
+      barcodeHeight: DEFAULT_LABEL_CONFIG.barcodeHeight,
+      layoutXY: {
+        ...p.layoutXY,
+        store: { ...p.layoutXY.store, w: DEFAULT_LABEL_CONFIG.layoutXY.store.w, h: DEFAULT_LABEL_CONFIG.layoutXY.store.h },
+        product: { ...p.layoutXY.product, w: DEFAULT_LABEL_CONFIG.layoutXY.product.w, h: DEFAULT_LABEL_CONFIG.layoutXY.product.h },
+        barcode: { ...p.layoutXY.barcode, w: DEFAULT_LABEL_CONFIG.layoutXY.barcode.w, h: DEFAULT_LABEL_CONFIG.layoutXY.barcode.h },
+        price: { ...p.layoutXY.price, w: DEFAULT_LABEL_CONFIG.layoutXY.price.w, h: DEFAULT_LABEL_CONFIG.layoutXY.price.h },
+      },
+      fontSize: { ...DEFAULT_LABEL_CONFIG.fontSize },
+    }));
+  };
 
   const isNative = printerBridge.isNativeShell();
   const [btAvailable] = useState(() => printerBridge.isBluetoothAvailable());
@@ -331,6 +349,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
+    dotsPerMm: 12,
     layout: layoutForPrint,
   });
 
@@ -448,6 +467,12 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       active
         ? 'bg-gray-50 border-gray-900 text-gray-900 shadow-2xs'
         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+    }`;
+  const miniSegBtn = (active: boolean) =>
+    `flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs transition-all text-center cursor-pointer ${
+      active
+        ? 'bg-black text-white border-black shadow-xs'
+        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
     }`;
 
   const renderSingleLabelCard = (productItem: Product) => (
@@ -773,71 +798,453 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                  )}
                </div>
 
-               {/* Coordinates table */}
-               <div className="border border-slate-200 rounded-lg p-2.5 space-y-2">
-                 <span className="text-[11px] font-bold text-slate-800 block">Live Element Coordinates (mm)</span>
-                 <div className="grid grid-cols-[1fr_48px_48px_48px_48px] gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider items-center">
-                   <span>Element</span><span>X mm</span><span>Y mm</span><span>W mm</span><span>H mm</span>
-                   
-                   {/* Store */}
-                   <span className="text-slate-700 normal-case font-semibold">Store</span>
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelWidth - 1)} value={layoutXY.store.x ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, store: { ...prev.store, x: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelHeight - 1)} value={layoutXY.store.y ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, store: { ...prev.store, y: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelWidth} value={layoutXY.store.w !== undefined ? layoutXY.store.w : effElemW('store').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, store: { ...prev.store, w: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelHeight} value={layoutXY.store.h !== undefined ? layoutXY.store.h : effElemH('store').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, store: { ...prev.store, h: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+               {/* Element Sizing & Font Sizes */}
+               <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-3">
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                     <SlidersHorizontal className="w-4 h-4 text-gray-900" />
+                     <span>Element Sizing & Font Sizes</span>
+                   </div>
+                   <button
+                     type="button"
+                     onClick={handleResetElementSizes}
+                     className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-black hover:bg-slate-100 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                     title="Reset element dimensions and font sizes to defaults"
+                   >
+                     <RotateCcw className="w-3 h-3" />
+                     <span>Reset</span>
+                   </button>
+                 </div>
 
-                   {/* Product */}
-                   <span className="text-slate-700 normal-case font-semibold">Product</span>
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelWidth - 1)} value={layoutXY.product.x ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, product: { ...prev.product, x: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelHeight - 1)} value={layoutXY.product.y ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, product: { ...prev.product, y: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelWidth} value={layoutXY.product.w !== undefined ? layoutXY.product.w : effElemW('product').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, product: { ...prev.product, w: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelHeight} value={layoutXY.product.h !== undefined ? layoutXY.product.h : effElemH('product').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, product: { ...prev.product, h: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+                 <div className="space-y-2.5">
+                   {/* Store Name */}
+                   <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/80 space-y-2">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-1.5">
+                         <Store className="w-3.5 h-3.5 text-slate-700" />
+                         <span className="font-bold text-[11px] text-slate-900">Store Name</span>
+                       </div>
+                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${showStoreName ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                         {showStoreName ? 'Active' : 'Hidden'}
+                       </span>
+                     </div>
+
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelWidth}
+                           value={layoutXY.store.w !== undefined ? layoutXY.store.w : effElemW('store').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, w: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, w: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelHeight}
+                           value={layoutXY.store.h !== undefined ? layoutXY.store.h : effElemH('store').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, h: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, h: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div className="col-span-2 sm:col-span-1">
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
+                         <div className="flex gap-1">
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, store: 1 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 1 } }));
+                             }}
+                             className={miniSegBtn((fontSize.store ?? 1) === 1)}
+                           >
+                             Normal
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, store: 2 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 2 } }));
+                             }}
+                             className={miniSegBtn((fontSize.store ?? 1) === 2)}
+                           >
+                             Large
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+
+                     {showPositionControls && (
+                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelWidth - 1)}
+                             value={layoutXY.store.x ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, store: { ...prev.store, x: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, x: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelHeight - 1)}
+                             value={layoutXY.store.y ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, store: { ...prev.store, y: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, y: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* Product Title */}
+                   <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/80 space-y-2">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-1.5">
+                         <Tag className="w-3.5 h-3.5 text-slate-700" />
+                         <span className="font-bold text-[11px] text-slate-900">Product Title</span>
+                       </div>
+                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${showProductName ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                         {showProductName ? 'Active' : 'Hidden'}
+                       </span>
+                     </div>
+
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelWidth}
+                           value={layoutXY.product.w !== undefined ? layoutXY.product.w : effElemW('product').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, w: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, w: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelHeight}
+                           value={layoutXY.product.h !== undefined ? layoutXY.product.h : effElemH('product').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, h: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, h: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div className="col-span-2 sm:col-span-1">
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
+                         <div className="flex gap-1">
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, product: 1 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 1 } }));
+                             }}
+                             className={miniSegBtn((fontSize.product ?? 1) === 1)}
+                           >
+                             Normal
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, product: 2 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 2 } }));
+                             }}
+                             className={miniSegBtn((fontSize.product ?? 2) === 2)}
+                           >
+                             Large
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+
+                     {showPositionControls && (
+                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelWidth - 1)}
+                             value={layoutXY.product.x ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, product: { ...prev.product, x: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, x: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelHeight - 1)}
+                             value={layoutXY.product.y ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, product: { ...prev.product, y: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, y: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                       </div>
+                     )}
+                   </div>
 
                    {/* Barcode Box */}
-                   <span className="text-slate-900 normal-case font-extrabold">Barcode</span>
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelWidth - effBarcodeWidth)} value={layoutXY.barcode.x ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, x: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelHeight - effBarcodeHeight)} value={layoutXY.barcode.y ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, y: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelWidth} value={barcodeWidth !== undefined ? barcodeWidth : effBarcodeWidth.toFixed(1)}
-                     onChange={e => { setBarcodeWidth(e.target.value); setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, w: e.target.value } })); }}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelHeight} value={barcodeHeight}
-                     onChange={e => { setBarcodeHeight(e.target.value); setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, h: e.target.value } })); }}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+                   <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/80 space-y-2">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-1.5">
+                         <Type className="w-3.5 h-3.5 text-slate-700" />
+                         <span className="font-bold text-[11px] text-slate-900">Barcode Box</span>
+                       </div>
+                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-black text-white font-mono">
+                         CODE 128
+                       </span>
+                     </div>
 
-                   {/* Price */}
-                   <span className="text-slate-900 border-b border-dashed border-slate-400 normal-case font-bold">Price</span>
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelWidth - 1)} value={layoutXY.price.x ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, price: { ...prev.price, x: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={0} max={Math.max(0, effLabelHeight - 1)} value={layoutXY.price.y ?? ''}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, price: { ...prev.price, y: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelWidth} value={layoutXY.price.w !== undefined ? layoutXY.price.w : effElemW('price').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, price: { ...prev.price, w: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
-                   <input type="number" step={0.5} min={1} max={effLabelHeight} value={layoutXY.price.h !== undefined ? layoutXY.price.h : effElemH('price').toFixed(1)}
-                     onChange={e => setLayoutXY(prev => ({ ...prev, price: { ...prev.price, h: e.target.value } }))}
-                     className="w-full px-1 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+                     <div className="grid grid-cols-2 gap-2 items-end">
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Barcode Width (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={10}
+                           max={effLabelWidth}
+                           value={barcodeWidth !== undefined ? barcodeWidth : effBarcodeWidth.toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setBarcodeWidth(v);
+                             setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, w: v } }));
+                             updateConfig(p => ({ ...p, barcodeWidth: v, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, w: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Barcode Height (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={4}
+                           max={effLabelHeight}
+                           value={barcodeHeight}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setBarcodeHeight(v);
+                             setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, h: v } }));
+                             updateConfig(p => ({ ...p, barcodeHeight: v, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, h: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                     </div>
+
+                     {showPositionControls && (
+                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelWidth - effBarcodeWidth)}
+                             value={layoutXY.barcode.x ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, x: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, x: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelHeight - effBarcodeHeight)}
+                             value={layoutXY.barcode.y ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, y: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, y: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* Selling Price */}
+                   <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/80 space-y-2">
+                     <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-1.5">
+                         <DollarSign className="w-3.5 h-3.5 text-slate-700" />
+                         <span className="font-bold text-[11px] text-slate-900">Selling Price</span>
+                       </div>
+                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${showPrice ? 'bg-black text-white' : 'bg-slate-200 text-slate-500'}`}>
+                         {showPrice ? 'Active' : 'Hidden'}
+                       </span>
+                     </div>
+
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelWidth}
+                           value={layoutXY.price.w !== undefined ? layoutXY.price.w : effElemW('price').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, w: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, w: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={1}
+                           max={effLabelHeight}
+                           value={layoutXY.price.h !== undefined ? layoutXY.price.h : effElemH('price').toFixed(1)}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, h: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, h: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                       <div className="col-span-2 sm:col-span-1">
+                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
+                         <div className="flex gap-1">
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, price: 1 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 1 } }));
+                             }}
+                             className={miniSegBtn((fontSize.price ?? 2) === 1)}
+                           >
+                             Normal
+                           </button>
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setFontSize(prev => ({ ...prev, price: 2 }));
+                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 2 } }));
+                             }}
+                             className={miniSegBtn((fontSize.price ?? 2) === 2)}
+                           >
+                             Large
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+
+                     {showPositionControls && (
+                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelWidth - 1)}
+                             value={layoutXY.price.x ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, price: { ...prev.price, x: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, x: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                           <input
+                             type="number"
+                             step={0.5}
+                             min={0}
+                             max={Math.max(0, effLabelHeight - 1)}
+                             value={layoutXY.price.y ?? ''}
+                             onChange={e => {
+                               const v = e.target.value;
+                               setLayoutXY(prev => ({ ...prev, price: { ...prev.price, y: v } }));
+                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, y: v } } }));
+                             }}
+                             className={numInputClass}
+                           />
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* Advanced X/Y Position Toggle */}
+                   <div className="pt-0.5 flex justify-center">
+                     <button
+                       type="button"
+                       onClick={() => setShowPositionControls(prev => !prev)}
+                       className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-black transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-slate-100"
+                     >
+                       {showPositionControls ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                       <span>{showPositionControls ? 'Hide Position Offsets (X, Y)' : 'Adjust Position Offsets (X, Y)'}</span>
+                     </button>
+                   </div>
                  </div>
                </div>
              </div>

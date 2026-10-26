@@ -137,6 +137,7 @@ export interface ThermalLabelOptions {
   /** Fine-tune feed distance in mm (positive feeds more, negative less). */
   feedOffsetMm?: number;
   labelOffsetMm?: number;
+  dotsPerMm?: number;
   /**
    * Optional absolute-position layout. When provided, each element with a
    * position is placed at (xMm, yMm) from the top-left of the label using
@@ -163,19 +164,13 @@ export interface LabelPosition {
   /** Available height in mm for wrapping (optional). */
   heightMm?: number;
   /** Text scale: 1 = normal, 2 = double size. */
-  size?: 1 | 2;
+  size?: number;
 }
 
-/**
- * Printable width in mm for a given roll/paper width.
- * Narrow rolls keep tighter side margins; 58mm/80mm follow the common specs
- * (48mm / 72mm printable).
- */
 export function getPrintableMm(paperWidthMm: number): number {
   if (paperWidthMm <= 40) return Math.max(paperWidthMm - 4, 10);
   if (paperWidthMm <= 58) return 48;
-  if (paperWidthMm <= 80) return 72;
-  return paperWidthMm - 8;
+  return paperWidthMm;
 }
 
 /**

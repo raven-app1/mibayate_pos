@@ -175,6 +175,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
     labelOffsetMm: effLabelOffsetMm,
+    dotsPerMm: (config.dpi ?? 300) === 203 ? 8 : 12,
     layout: layoutForPrint,
   };
 

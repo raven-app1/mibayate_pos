@@ -30,6 +30,7 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
     product: 1,
     price: 2,
   },
+  dpi: 300,
 };
 
 const STORAGE_KEY = 'retail_shop_label_config';
@@ -42,6 +43,7 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
       return {
         ...DEFAULT_LABEL_CONFIG,
         ...parsed,
+        dpi: parsed.dpi === 203 ? 203 : 300,
         labelAlign: parsed.labelAlign === 'left' || parsed.labelAlign === 'center' ? parsed.labelAlign : 'right',
         labelOffsetX: typeof parsed.labelOffsetX === 'string' ? parsed.labelOffsetX : '0',
         storeName: parsed.storeName || defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
