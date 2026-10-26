@@ -173,9 +173,10 @@ function sizeCommands(
   labelHeightMm: number,
   paperMode: 'receipt' | 'sticker',
   labelGapMm: number,
+  labelOffsetMm = 0,
 ): string[] {
   return [
-    `SIZE ${fmt(labelWidthMm)} mm,${fmt(labelHeightMm)} mm`,
+    `SIZE ${fmt(labelWidthMm + Math.max(0, labelOffsetMm))} mm,${fmt(labelHeightMm)} mm`,
     paperMode === 'sticker'
       ? `GAP ${fmt(labelGapMm)} mm,0 mm`
       : 'GAP 0 mm,0 mm',
@@ -204,6 +205,7 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
     barcodeHeightMm = 10,
     paperMode = 'sticker',
     labelGapMm = 3,
+    labelOffsetMm = 0,
     layout,
     copies = 1,
     dotsPerMm = DEFAULT_DOTS_PER_MM,
@@ -215,6 +217,7 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   const widthDots = Math.max(dots(widthMm, dotsPerMm), 8);
   const heightDots = Math.max(dots(Math.max(5, labelHeightMm), dotsPerMm), 8);
   const priceValue = priceText(price, currencySymbol);
+  const offsetDots = dots(Math.max(0, labelOffsetMm), dotsPerMm);
   const barcodeHeightDots = Math.max(dots(barcodeHeightMm, dotsPerMm), 20);
   const barcodeData = normalizeBarcodeValue(barcodeValue, barcodeType);
   const barcodeModules = estimateBarcodeModules(barcodeData, barcodeType);
@@ -350,7 +353,7 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
     const availableWidth = Math.max(widthDots - margin * 2, 40);
     const narrow = Math.min(Math.max(Math.floor(availableWidth / barcodeModules), 1), 4);
     const wide = Math.min(narrow * 2, 10);
-    barcodeCommand = `BARCODE ${margin},${cursorY},"${tsplBarcodeType(barcodeType)}",${barcodeHeightDots},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`;
+    barcodeCommand = `BARCODE ${margin + offsetDots},${cursorY},"${tsplBarcodeType(barcodeType)}",${barcodeHeightDots},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`;
 
     if (showPrice && priceValue) {
       const priceY = cursorY + barcodeHeightDots + (showBarcodeText ? 20 : 0) + 8;
@@ -374,8 +377,8 @@ function buildTsplRasterLabel(opts: TsplLabelOptions): Uint8Array | null {
   const bitmapData = invertForTspl(image);
   const copyCount = Math.max(1, Math.min(Math.floor(copies) || 1, 999));
   const parts: Array<string | Uint8Array> = [
-    `${sizeCommands(widthMm, Math.max(5, labelHeightMm), paperMode, labelGapMm).join('\r\n')}\r\n`,
-    `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+    `${sizeCommands(widthMm, Math.max(5, labelHeightMm), paperMode, labelGapMm, labelOffsetMm).join('\r\n')}\r\n`,
+    `BITMAP ${image.xDots + offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
     bitmapData,
     '\r\n',
   ];
@@ -402,6 +405,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
     barcodeHeightMm = 10,
     paperMode = 'sticker',
     labelGapMm = 3,
+    labelOffsetMm = 0,
     layout,
     copies = 1,
     dotsPerMm = DEFAULT_DOTS_PER_MM,
@@ -421,7 +425,8 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
   const widthMm = Math.max(5, Math.min(labelWidthMm, paperWidthMm));
   const heightMm = Math.max(5, labelHeightMm);
-  const commands = sizeCommands(widthMm, heightMm, paperMode, labelGapMm);
+  const offsetDots = dots(Math.max(0, labelOffsetMm), dotsPerMm);
+  const commands = sizeCommands(widthMm, heightMm, paperMode, labelGapMm, labelOffsetMm);
 
   const storePos = layout?.storeName;
   const productPos = layout?.productName;
@@ -436,7 +441,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
   if (hasLayout) {
     if (showStoreName && storeName && storePos) {
       const size = storePos.size ?? 1;
-      const x = dots(storePos.xMm, dotsPerMm);
+      const x = dots(storePos.xMm, dotsPerMm) + offsetDots;
       const y = dots(storePos.yMm, dotsPerMm);
       const available = Math.max(dots(storePos.widthMm ?? (widthMm - storePos.xMm), dotsPerMm), 20);
       const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
@@ -445,7 +450,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
     if (showProductName && productName && productPos) {
       const size = productPos.size ?? 1;
-      const x = dots(productPos.xMm, dotsPerMm);
+      const x = dots(productPos.xMm, dotsPerMm) + offsetDots;
       const y = dots(productPos.yMm, dotsPerMm);
       const available = Math.max(dots(productPos.widthMm ?? (widthMm - productPos.xMm), dotsPerMm), 20);
       const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['2'] * size)));
@@ -461,7 +466,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
     }
 
     if (barcodePos) {
-      const x = dots(barcodePos.xMm, dotsPerMm);
+      const x = dots(barcodePos.xMm, dotsPerMm) + offsetDots;
       const y = dots(barcodePos.yMm, dotsPerMm);
       const available = Math.max(dots(barcodePos.widthMm ?? (widthMm - barcodePos.xMm), dotsPerMm), 40);
       const height = barcodePos.heightMm
@@ -476,7 +481,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
     if (showPrice && pricePos) {
       const size = pricePos.size ?? 1;
-      const x = dots(pricePos.xMm, dotsPerMm);
+      const x = dots(pricePos.xMm, dotsPerMm) + offsetDots;
       const y = dots(pricePos.yMm, dotsPerMm);
       const available = Math.max(dots(pricePos.widthMm ?? (widthMm - pricePos.xMm), dotsPerMm), 20);
       const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
@@ -488,7 +493,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
     if (showStoreName && storeName) {
       const maxChars = Math.max(1, Math.floor(dots(widthMm - 2, dotsPerMm) / FONT_WIDTH['3']));
-      commands.push(textCommand(dots(1, dotsPerMm), cursorY, '3', 1, truncate(storeName, maxChars)));
+      commands.push(textCommand(dots(1, dotsPerMm) + offsetDots, cursorY, '3', 1, truncate(storeName, maxChars)));
       cursorY += FONT_HEIGHT['3'] + 8;
     }
 
@@ -497,7 +502,7 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
       const lineHeight = FONT_HEIGHT['2'];
       const lines = wrapText(productName, maxChars);
       lines.forEach((line, index) => {
-        commands.push(textCommand(dots(1, dotsPerMm), cursorY + index * lineHeight, '2', 1, line));
+        commands.push(textCommand(dots(1, dotsPerMm) + offsetDots, cursorY + index * lineHeight, '2', 1, line));
       });
       cursorY += lines.length * lineHeight;
     }
@@ -507,14 +512,14 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
     const narrow = Math.min(Math.max(Math.floor(available / barcodeModules), 1), 4);
     const wide = Math.min(narrow * 2, 10);
     commands.push(
-      `BARCODE ${dots(1, dotsPerMm)},${cursorY},"${tsplBarcodeType(barcodeType)}",${barcodeHeightDots},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`
+      `BARCODE ${dots(1, dotsPerMm) + offsetDots},${cursorY},"${tsplBarcodeType(barcodeType)}",${barcodeHeightDots},${showBarcodeText ? 1 : 0},0,${narrow},${wide},"${sanitize(barcodeData)}"`
     );
     cursorY += barcodeHeightDots + (showBarcodeText ? FONT_HEIGHT['1'] + 4 : 0);
 
     if (showPrice) {
       const maxChars = Math.max(1, Math.floor(dots(widthMm - 2, dotsPerMm) / FONT_WIDTH['3']));
       const priceText = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
-      commands.push(textCommand(dots(1, dotsPerMm), cursorY + 8, '3', 1, truncate(priceText, maxChars)));
+      commands.push(textCommand(dots(1, dotsPerMm) + offsetDots, cursorY + 8, '3', 1, truncate(priceText, maxChars)));
     }
   }
 
@@ -529,9 +534,11 @@ export function testPrintTspl(
   labelWidthMm = 50,
   labelHeightMm = 30,
   labelGapMm = 3,
+  labelOffsetMm = 0,
 ): Uint8Array {
   const widthMm = Math.max(5, labelWidthMm);
   const heightMm = Math.max(5, labelHeightMm);
+  const offsetDots = dots(Math.max(0, labelOffsetMm), DEFAULT_DOTS_PER_MM);
   const maxChars = Math.max(1, Math.floor(dots(widthMm - 4, DEFAULT_DOTS_PER_MM) / FONT_WIDTH['3']));
   const store = truncate(storeName || 'My Store', maxChars);
 
@@ -570,32 +577,32 @@ export function testPrintTspl(
     if (image) {
       const bitmapData = invertForTspl(image);
       return concatParts([
-        `SIZE ${fmt(widthMm)} mm,${fmt(heightMm)} mm\r\n`,
+        `SIZE ${fmt(widthMm + Math.max(0, labelOffsetMm))} mm,${fmt(heightMm)} mm\r\n`,
         `GAP ${fmt(Math.max(0, labelGapMm))} mm,0 mm\r\n`,
         'DIRECTION 0\r\n',
         'REFERENCE 0,0\r\n',
         'DENSITY 8\r\n',
         'CLS\r\n',
-        `BITMAP ${image.xDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
+        `BITMAP ${image.xDots + offsetDots},${image.yDots},${image.widthBytes},${image.heightDots},0,`,
         bitmapData,
         '\r\n',
-        `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM)},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"\r\n`,
+        `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM) + offsetDots},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"\r\n`,
         'PRINT 1,1\r\n',
       ]);
     }
   }
 
   const commands = [
-    `SIZE ${fmt(widthMm)} mm,${fmt(heightMm)} mm`,
+    `SIZE ${fmt(widthMm + Math.max(0, labelOffsetMm))} mm,${fmt(heightMm)} mm`,
     `GAP ${fmt(Math.max(0, labelGapMm))} mm,0 mm`,
     'DIRECTION 0',
     'REFERENCE 0,0',
     'DENSITY 8',
     'CLS',
-    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(2, DEFAULT_DOTS_PER_MM), '3', 1, store),
-    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(7, DEFAULT_DOTS_PER_MM), '2', 1, 'MiBayate Printer Test'),
-    textCommand(dots(2, DEFAULT_DOTS_PER_MM), dots(11, DEFAULT_DOTS_PER_MM), '2', 1, 'TSPL label mode works.'),
-    `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM)},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"`,
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM) + offsetDots, dots(2, DEFAULT_DOTS_PER_MM), '3', 1, store),
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM) + offsetDots, dots(7, DEFAULT_DOTS_PER_MM), '2', 1, 'MiBayate Printer Test'),
+    textCommand(dots(2, DEFAULT_DOTS_PER_MM) + offsetDots, dots(11, DEFAULT_DOTS_PER_MM), '2', 1, 'TSPL label mode works.'),
+    `BARCODE ${dots(2, DEFAULT_DOTS_PER_MM) + offsetDots},${dots(16, DEFAULT_DOTS_PER_MM)},"128",${dots(6, DEFAULT_DOTS_PER_MM)},1,0,2,4,"123456789012"`,
     'PRINT 1,1',
   ];
 

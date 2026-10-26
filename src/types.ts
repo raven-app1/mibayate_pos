@@ -171,7 +171,6 @@ export interface SalesAnalytics {
 
 export interface LabelConfig {
   paperMode: 'sticker' | 'receipt';
-  protocol: 'escpos' | 'tspl';
   paperWidth: string;
   labelWidth: string;
   labelHeight: string;
@@ -181,6 +180,8 @@ export interface LabelConfig {
   cutMode: 'off' | 'full' | 'partial';
   labelGap: string;
   feedOffset: string;
+  labelAlign: 'left' | 'center' | 'right';
+  labelOffsetX: string;
   showStoreName: boolean;
   showProductName: boolean;
   showPrice: boolean;

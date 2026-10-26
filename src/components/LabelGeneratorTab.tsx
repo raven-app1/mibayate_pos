@@ -8,13 +8,10 @@ import {
 import { Product, LabelConfig } from '../types';
 import BarcodeSVG from './BarcodeSVG';
 import * as printerBridge from '../lib/printerBridge';
-import {
-  buildThermalLabel, init as escInit, setCodePage, feedPitch,
-  normalizeBarcodeValue, getPrintableMm, testPrint,
-} from '../lib/escpos';
+import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG } from '../lib/labelConfig';
+import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
 
 interface LabelGeneratorTabProps {
   products: Product[];
@@ -219,6 +216,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
   const effLabelGap = clamp(parseMm(config.labelGap) || 3, 2, 10);
   const effFeedOffset = clamp(parseMm(config.feedOffset) || 0, -10, 10);
+  const effLabelOffsetMm = computeLabelOffsetMm(config);
 
   const isMobile = viewportSize.w < 768;
 
@@ -376,6 +374,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     paperMode: config.paperMode,
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
+    labelOffsetMm: effLabelOffsetMm,
     layout: layoutForPrint,
   });
 
@@ -401,26 +400,12 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       await ensureLabelFont();
       await new Promise(r => setTimeout(r, 400));
 
-      if (config.protocol === 'tspl') {
-        for (let i = 0; i < printItemsList.length; i++) {
-          const item = printItemsList[i];
-          await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
-          setBtProgress({ current: i + 1, total: printItemsList.length });
-          if (i < printItemsList.length - 1) {
-            await new Promise(r => setTimeout(r, 150));
-          }
-        }
-      } else {
-        await printerBridge.send(escInit());
-        await printerBridge.send(setCodePage('CP437'));
-
-        for (let i = 0; i < printItemsList.length; i++) {
-          const item = printItemsList[i];
-          await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
-          setBtProgress({ current: i + 1, total: printItemsList.length });
-          if (i < printItemsList.length - 1) {
-            await new Promise(r => setTimeout(r, 150));
-          }
+      for (let i = 0; i < printItemsList.length; i++) {
+        const item = printItemsList[i];
+        await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
+        setBtProgress({ current: i + 1, total: printItemsList.length });
+        if (i < printItemsList.length - 1) {
+          await new Promise(r => setTimeout(r, 150));
         }
       }
     } catch (err: any) {
@@ -433,7 +418,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       setBtPrinting(false);
       setBtProgress({ current: 0, total: 0 });
     }
-  }, [printItemsList, labelOptionsFor, btPrinting, config.protocol]);
+  }, [printItemsList, labelOptionsFor, btPrinting]);
 
   const handleTestPrint = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
@@ -441,28 +426,22 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     try {
       await ensureLabelFont();
       await printerBridge.send(
-        config.protocol === 'tspl'
-          ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
-          : testPrint()
+        testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
       );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
     }
-  }, [btPrinting, config.protocol, config.storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
+  }, [btPrinting, config.storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
 
   const handleFeedAlign = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(
-        config.protocol === 'tspl'
-          ? feedTspl()
-          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
-      );
+      await printerBridge.send(feedTspl());
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
-  }, [btPrinting, config.protocol, effLabelHeight, effLabelGap, effFeedOffset]);
+  }, [btPrinting]);
 
   const filteredProducts = products.filter(p => {
     if (!p) return false;
@@ -936,28 +915,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </button>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                    Printer Language
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => updateConfig(p => ({ ...p, protocol: 'escpos' }))}
-                      className={segBtn(config.protocol === 'escpos')}
-                    >
-                      ESC/POS (Receipt)
-                    </button>
-                    <button
-                      onClick={() => updateConfig(p => ({ ...p, protocol: 'tspl' }))}
-                      className={segBtn(config.protocol === 'tspl')}
-                    >
-                      TSPL (Label)
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
-                    Set the printer itself to Label mode when using TSPL, or Receipt/ESC-POS mode when using ESC/POS. Blank paper usually means these two do not match.
-                  </p>
-                </div>
               </div>
             ) : (
               <p className="text-xs text-slate-500 font-medium">
@@ -1058,6 +1015,29 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </div>
                 </div>
               )}
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                  Label Position on Paper
+                </label>
+                <div className="flex gap-1.5 text-xs">
+                  <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'left' }))} className={segBtn(config.labelAlign === 'left')}>Left</button>
+                  <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'center' }))} className={segBtn(config.labelAlign === 'center')}>Center</button>
+                  <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'right' }))} className={segBtn(config.labelAlign === 'right')}>Right</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-1.5">
+                  <span className="text-[10px] font-bold text-slate-600">Print starts {effLabelOffsetMm.toFixed(1)} mm from the left edge</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-500">Nudge</span>
+                    <input type="number" min={-20} max={20} step={0.5} value={config.labelOffsetX}
+                      onChange={e => updateConfig(p => ({ ...p, labelOffsetX: e.target.value }))}
+                      className="w-16 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                  Where the sticker sits inside the paper path. Use Right when the label roll is loaded against the right guide, then nudge until it lands on the sticker.
+                </p>
+              </div>
             </div>
           </div>
 

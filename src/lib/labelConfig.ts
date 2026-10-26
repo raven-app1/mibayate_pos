@@ -2,7 +2,6 @@ import { LabelConfig } from '../types';
 
 export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   paperMode: 'sticker',
-  protocol: 'escpos',
   paperWidth: '80',
   labelWidth: '80',
   labelHeight: '30',
@@ -12,6 +11,8 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   cutMode: 'off',
   labelGap: '3',
   feedOffset: '0',
+  labelAlign: 'right',
+  labelOffsetX: '0',
   showStoreName: true,
   showProductName: true,
   showPrice: true,
@@ -41,7 +42,8 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
       return {
         ...DEFAULT_LABEL_CONFIG,
         ...parsed,
-        protocol: parsed.protocol === 'tspl' ? 'tspl' : 'escpos',
+        labelAlign: parsed.labelAlign === 'left' || parsed.labelAlign === 'center' ? parsed.labelAlign : 'right',
+        labelOffsetX: typeof parsed.labelOffsetX === 'string' ? parsed.labelOffsetX : '0',
         storeName: parsed.storeName || defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
         layoutXY: {
           ...DEFAULT_LABEL_CONFIG.layoutXY,
@@ -58,6 +60,21 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
     ...DEFAULT_LABEL_CONFIG,
     storeName: defaultStoreName || DEFAULT_LABEL_CONFIG.storeName,
   };
+}
+
+export function computeLabelOffsetMm(config: {
+  paperWidth: string;
+  labelWidth: string;
+  labelAlign?: 'left' | 'center' | 'right';
+  labelOffsetX?: string;
+}): number {
+  const paperMm = parseFloat(config.paperWidth) || 80;
+  const labelMm = Math.min(parseFloat(config.labelWidth) || paperMm, paperMm);
+  const align = config.labelAlign ?? 'right';
+  const base = align === 'left' ? 0 : align === 'center' ? (paperMm - labelMm) / 2 : paperMm - labelMm;
+  const parsedNudge = parseFloat(config.labelOffsetX ?? '0');
+  const nudge = isFinite(parsedNudge) ? Math.min(Math.max(parsedNudge, -20), 20) : 0;
+  return Math.max(0, Math.round((base + nudge) * 10) / 10);
 }
 
 export function saveLabelConfig(config: LabelConfig): void {

@@ -7,13 +7,10 @@ import {
 import { Product, LabelConfig } from '../types';
 import BarcodeSVG from './BarcodeSVG';
 import * as printerBridge from '../lib/printerBridge';
-import {
-  buildThermalLabel, init as escInit, setCodePage, feedPitch,
-  normalizeBarcodeValue, getPrintableMm, testPrint,
-} from '../lib/escpos';
+import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
+import { loadLabelConfig, saveLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
 
 interface BarcodePrintModalProps {
   products: Product[];
@@ -59,7 +56,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const [showCodeText, setShowCodeText] = useState(initialConfig.showCodeText);
 
   const [paperMode, setPaperMode] = useState<'sticker' | 'receipt'>(initialConfig.paperMode);
-  const [protocol, setProtocol] = useState<LabelConfig['protocol']>(initialConfig.protocol);
 
   const [paperWidth, setPaperWidth] = useState(initialConfig.paperWidth);
   const [labelWidth, setLabelWidth] = useState(initialConfig.labelWidth);
@@ -69,6 +65,8 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const [cutMode, setCutMode] = useState<'off' | 'full' | 'partial'>(initialConfig.cutMode);
   const [labelGap, setLabelGap] = useState(initialConfig.labelGap);
   const [feedOffset, setFeedOffset] = useState(initialConfig.feedOffset);
+  const [labelAlign, setLabelAlign] = useState<LabelConfig['labelAlign']>(initialConfig.labelAlign);
+  const [labelOffsetX, setLabelOffsetX] = useState(initialConfig.labelOffsetX);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomFactor, setZoomFactor] = useState(1);
@@ -91,7 +89,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       setShowPrice(cfg.showPrice);
       setShowCodeText(cfg.showCodeText);
       setPaperMode(cfg.paperMode);
-      setProtocol(cfg.protocol);
       setPaperWidth(cfg.paperWidth);
       setLabelWidth(cfg.labelWidth);
       setLabelHeight(cfg.labelHeight);
@@ -100,6 +97,8 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       setCutMode(cfg.cutMode);
       setLabelGap(cfg.labelGap);
       setFeedOffset(cfg.feedOffset);
+      setLabelAlign(cfg.labelAlign);
+      setLabelOffsetX(cfg.labelOffsetX);
       setLayoutXY(cfg.layoutXY);
       setFontSize(cfg.fontSize);
     }
@@ -110,7 +109,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     const next = updater({
       ...current,
       paperMode,
-      protocol,
       paperWidth,
       labelWidth,
       labelHeight,
@@ -119,6 +117,8 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       cutMode,
       labelGap,
       feedOffset,
+      labelAlign,
+      labelOffsetX,
       showStoreName,
       showProductName,
       showPrice,
@@ -133,7 +133,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     setShowPrice(next.showPrice);
     setShowCodeText(next.showCodeText);
     setPaperMode(next.paperMode);
-    setProtocol(next.protocol);
     setPaperWidth(next.paperWidth);
     setLabelWidth(next.labelWidth);
     setLabelHeight(next.labelHeight);
@@ -142,10 +141,12 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     setCutMode(next.cutMode);
     setLabelGap(next.labelGap);
     setFeedOffset(next.feedOffset);
+    setLabelAlign(next.labelAlign);
+    setLabelOffsetX(next.labelOffsetX);
     setLayoutXY(next.layoutXY);
     setFontSize(next.fontSize);
     saveLabelConfig(next);
-  }, [paperMode, protocol, paperWidth, labelWidth, labelHeight, barcodeWidth, barcodeHeight, cutMode, labelGap, feedOffset, showStoreName, showProductName, showPrice, showCodeText, storeName, layoutXY, fontSize, businessName]);
+  }, [paperMode, paperWidth, labelWidth, labelHeight, barcodeWidth, barcodeHeight, cutMode, labelGap, feedOffset, labelAlign, labelOffsetX, showStoreName, showProductName, showPrice, showCodeText, storeName, layoutXY, fontSize, businessName]);
 
   const [dragState, setDragState] = useState<{
     elem: 'store' | 'product' | 'barcode' | 'price';
@@ -213,6 +214,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
   const effLabelGap = clamp(parseMm(labelGap) || 3, 2, 10);
   const effFeedOffset = clamp(parseMm(feedOffset) || 0, -10, 10);
+  const effLabelOffsetMm = computeLabelOffsetMm({ paperWidth, labelWidth, labelAlign, labelOffsetX });
   const [viewportSize, setViewportSize] = useState({
     w: typeof window !== 'undefined' ? window.innerWidth : 375,
     h: typeof window !== 'undefined' ? window.innerHeight : 667,
@@ -422,6 +424,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     paperMode,
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
+    labelOffsetMm: effLabelOffsetMm,
     layout: layoutForPrint,
   });
 
@@ -436,26 +439,12 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       await ensureLabelFont();
       await new Promise(r => setTimeout(r, 400));
 
-      if (protocol === 'tspl') {
-        for (let i = 0; i < printItemsList.length; i++) {
-          const item = printItemsList[i];
-          await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
-          setBtProgress({ current: i + 1, total: printItemsList.length });
-          if (i < printItemsList.length - 1) {
-            await new Promise(r => setTimeout(r, 150));
-          }
-        }
-      } else {
-        await printerBridge.send(escInit());
-        await printerBridge.send(setCodePage('CP437'));
-
-        for (let i = 0; i < printItemsList.length; i++) {
-          const item = printItemsList[i];
-          await printerBridge.send(buildThermalLabel(labelOptionsFor(item.product)));
-          setBtProgress({ current: i + 1, total: printItemsList.length });
-          if (i < printItemsList.length - 1) {
-            await new Promise(r => setTimeout(r, 150));
-          }
+      for (let i = 0; i < printItemsList.length; i++) {
+        const item = printItemsList[i];
+        await printerBridge.send(buildTsplLabel({ ...labelOptionsFor(item.product), copies: 1 }));
+        setBtProgress({ current: i + 1, total: printItemsList.length });
+        if (i < printItemsList.length - 1) {
+          await new Promise(r => setTimeout(r, 150));
         }
       }
     } catch (err: any) {
@@ -468,7 +457,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       setBtPrinting(false);
       setBtProgress({ current: 0, total: 0 });
     }
-  }, [printItemsList, labelOptionsFor, btPrinting, protocol]);
+  }, [printItemsList, labelOptionsFor, btPrinting]);
 
   const handleTestPrint = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
@@ -476,28 +465,22 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
     try {
       await ensureLabelFont();
       await printerBridge.send(
-        protocol === 'tspl'
-          ? testPrintTspl(storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
-          : testPrint()
+        testPrintTspl(storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
       );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
     }
-  }, [btPrinting, protocol, storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
+  }, [btPrinting, storeName, businessName, effLabelWidth, effLabelHeight, effLabelGap]);
 
   const handleFeedAlign = useCallback(async () => {
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(
-        protocol === 'tspl'
-          ? feedTspl()
-          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
-      );
+      await printerBridge.send(feedTspl());
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
-  }, [btPrinting, protocol, effLabelHeight, effLabelGap, effFeedOffset]);
+  }, [btPrinting]);
 
   if (!isOpen) return null;
 
@@ -943,23 +926,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                  </div>
                </div>
 
-               <div>
-                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                   Printer Language
-                 </label>
-                 <div className="flex gap-1.5 text-xs">
-                   <button onClick={() => updateConfig(p => ({ ...p, protocol: 'escpos' }))} className={segBtn(protocol === 'escpos')}>
-                     ESC/POS (Receipt)
-                   </button>
-                   <button onClick={() => updateConfig(p => ({ ...p, protocol: 'tspl' }))} className={segBtn(protocol === 'tspl')}>
-                     TSPL (Label)
-                   </button>
-                 </div>
-                 <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                   Match this to the printer mode. Blank paper usually means the mode and language do not match.
-                 </p>
-               </div>
-
                <div className="grid grid-cols-3 gap-2">
                  <div>
                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
@@ -1002,6 +968,29 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                    </div>
                  </div>
                )}
+
+               <div>
+                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                   Label Position on Paper
+                 </label>
+                 <div className="flex gap-1.5 text-xs">
+                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'left' }))} className={segBtn(labelAlign === 'left')}>Left</button>
+                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'center' }))} className={segBtn(labelAlign === 'center')}>Center</button>
+                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'right' }))} className={segBtn(labelAlign === 'right')}>Right</button>
+                 </div>
+                 <div className="flex items-center justify-between gap-2 mt-1.5">
+                   <span className="text-[10px] font-bold text-slate-600">Print starts {effLabelOffsetMm.toFixed(1)} mm from the left edge</span>
+                   <div className="flex items-center gap-1">
+                     <span className="text-[10px] font-bold text-slate-500">Nudge</span>
+                     <input type="number" min={-20} max={20} step={0.5} value={labelOffsetX}
+                       onChange={e => updateConfig(p => ({ ...p, labelOffsetX: e.target.value }))}
+                       className="w-16 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
+                   </div>
+                 </div>
+                 <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                   Where the sticker sits inside the paper path. Use Right when the label roll is loaded against the right guide, then nudge until it lands on the sticker.
+                 </p>
+               </div>
              </div>
 
              {/* LABEL DESIGN */}

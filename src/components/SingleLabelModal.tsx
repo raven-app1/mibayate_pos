@@ -6,13 +6,10 @@ import {
 import { Product, LabelConfig } from '../types';
 import BarcodeSVG from './BarcodeSVG';
 import * as printerBridge from '../lib/printerBridge';
-import {
-  buildThermalLabel, init as escInit, setCodePage, feedPitch,
-  normalizeBarcodeValue, getPrintableMm, testPrint, BarcodeType,
-} from '../lib/escpos';
+import { normalizeBarcodeValue, getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
-import { loadLabelConfig, saveLabelConfig } from '../lib/labelConfig';
+import { loadLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
 import { useBackDismiss } from '../lib/backNavigation';
 
 interface SingleLabelModalProps {
@@ -148,6 +145,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
 
   const effLabelGap = clamp(parseMm(config.labelGap) || 3, 2, 10);
   const effFeedOffset = clamp(parseMm(config.feedOffset) || 0, -10, 10);
+  const effLabelOffsetMm = computeLabelOffsetMm(config);
 
   const layoutForPrint = {
     storeName: config.showStoreName ? { xMm: effElemX('store'), yMm: effElemY('store'), widthMm: effElemW('store'), heightMm: effElemH('store'), size: config.fontSize.store as 1 | 2 } : undefined,
@@ -176,6 +174,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     paperMode: config.paperMode,
     labelGapMm: effLabelGap,
     feedOffsetMm: effFeedOffset,
+    labelOffsetMm: effLabelOffsetMm,
     layout: layoutForPrint,
   };
 
@@ -190,21 +189,8 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
       await ensureLabelFont();
       await new Promise(r => setTimeout(r, 300));
 
-      if (config.protocol === 'tspl') {
-        await printerBridge.send(buildTsplLabel({ ...labelOptions, copies: quantity }));
-        setBtProgress({ current: quantity, total: quantity });
-      } else {
-        await printerBridge.send(escInit());
-        await printerBridge.send(setCodePage('CP437'));
-
-        for (let i = 0; i < quantity; i++) {
-          await printerBridge.send(buildThermalLabel(labelOptions));
-          setBtProgress({ current: i + 1, total: quantity });
-          if (i < quantity - 1) {
-            await new Promise(r => setTimeout(r, 150));
-          }
-        }
-      }
+      await printerBridge.send(buildTsplLabel({ ...labelOptions, copies: quantity }));
+      setBtProgress({ current: quantity, total: quantity });
     } catch (err: any) {
       setBtError(err?.message || 'Print failed. Check printer connection.');
       if (!printerBridge.isConnected()) {
@@ -223,9 +209,7 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     try {
       await ensureLabelFont();
       await printerBridge.send(
-        config.protocol === 'tspl'
-          ? testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
-          : testPrint()
+        testPrintTspl(config.storeName || businessName || 'My Store', effLabelWidth, effLabelHeight, effLabelGap)
       );
     } catch (err: any) {
       setBtError(err?.message || 'Test print failed');
@@ -236,20 +220,10 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
     if (!printerBridge.isConnected() || btPrinting) return;
     setBtError(null);
     try {
-      await printerBridge.send(
-        config.protocol === 'tspl'
-          ? feedTspl()
-          : feedPitch(effLabelHeight, effLabelGap, effFeedOffset)
-      );
+      await printerBridge.send(feedTspl());
     } catch (err: any) {
       setBtError(err?.message || 'Feed failed');
     }
-  };
-
-  const setProtocol = (protocol: LabelConfig['protocol']) => {
-    const next = { ...config, protocol };
-    setConfig(next);
-    saveLabelConfig(next);
   };
 
   const previewScale = Math.min(280 / effLabelWidth, 6);
@@ -520,15 +494,6 @@ export const SingleLabelModal: React.FC<SingleLabelModalProps> = ({
           <div className="flex flex-wrap items-center gap-1.5">
             {btAvailable && (
               <>
-                <select
-                  value={config.protocol}
-                  onChange={e => setProtocol(e.target.value as LabelConfig['protocol'])}
-                  className="px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 focus:outline-none cursor-pointer"
-                  title="Match this to the printer's current mode"
-                >
-                  <option value="escpos">ESC/POS</option>
-                  <option value="tspl">TSPL label</option>
-                </select>
                 <button
                   onClick={handleTestPrint}
                   disabled={!btConnected || btPrinting}
