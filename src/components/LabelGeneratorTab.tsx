@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Printer, X, Search, CheckSquare, Square, Settings2,
   Tag, Bluetooth, BluetoothOff, Loader2, CheckCircle2, AlertCircle,
-  Minus, Plus, Ruler, Scissors, RefreshCw, Save, Layers,
+  Minus, Plus, Ruler, Scissors, Save, Layers,
   Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
   SlidersHorizontal, Type, Store, DollarSign, ChevronDown, ChevronUp,
-  FileText, Check, AlertTriangle,
+  FileText, Check, MoreVertical,
 } from 'lucide-react';
 import { Product, LabelConfig } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
@@ -22,7 +22,7 @@ interface LabelGeneratorTabProps {
   businessName?: string;
 }
 
-type DesignerTab = 'layout' | 'content' | 'appearance' | 'printer' | 'advanced' | 'bulk';
+type DesignerTab = 'layout' | 'content' | 'appearance' | 'printer' | 'advanced';
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 const parseMm = (v: string) => {
@@ -40,14 +40,14 @@ const ToggleSwitch: React.FC<{
     role="switch"
     aria-checked={checked}
     onClick={() => onChange(!checked)}
-    className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+    className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
       checked ? 'bg-black' : 'bg-slate-300'
     }`}
     title={title}
   >
     <div
-      className={`bg-white w-4 h-4 rounded-full shadow-xs transform transition-transform ${
-        checked ? 'translate-x-4' : 'translate-x-0'
+      className={`bg-white w-3.5 h-3.5 rounded-full shadow-xs transform transition-transform ${
+        checked ? 'translate-x-3.5' : 'translate-x-0'
       }`}
     />
   </button>
@@ -62,7 +62,7 @@ const MmInput: React.FC<{
   step?: number;
 }> = ({ label, value, onChange, min = 0, max = 300, step = 0.5 }) => (
   <div>
-    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1 truncate">
       {label}
     </label>
     <div className="relative">
@@ -73,9 +73,9 @@ const MmInput: React.FC<{
         max={max}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full pr-8 pl-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-gray-900"
+        className="w-full pr-7 pl-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-gray-900"
       />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
         mm
       </span>
     </div>
@@ -125,7 +125,7 @@ const FieldEditorCard: React.FC<{
 
   return (
     <div className={`rounded-xl border transition-all ${enabled ? 'bg-white border-slate-200/90 shadow-2xs' : 'bg-slate-50/70 border-slate-200/60 opacity-80'}`}>
-      <div className="p-3 flex items-center justify-between gap-3">
+      <div className="p-3 flex items-center justify-between gap-2.5">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -139,7 +139,7 @@ const FieldEditorCard: React.FC<{
               <span className="font-extrabold text-xs text-slate-900 truncate">{title}</span>
               {subtitle && <span className="text-[10px] text-slate-400 font-medium truncate hidden sm:inline">· {subtitle}</span>}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono">
+            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
               {width}×{height}mm · X:{posX}, Y:{posY}
             </div>
           </div>
@@ -149,14 +149,14 @@ const FieldEditorCard: React.FC<{
         </button>
 
         {onToggleEnabled && (
-          <div className="flex items-center gap-2 shrink-0 border-l border-slate-200/80 pl-3">
+          <div className="flex items-center gap-2 shrink-0 border-l border-slate-200/80 pl-2.5">
             <ToggleSwitch checked={enabled} onChange={onToggleEnabled} title={`Toggle ${title}`} />
           </div>
         )}
       </div>
 
       {isOpen && (
-        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-3">
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-2.5">
           {extraContent}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
@@ -216,6 +216,8 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
   const [saveToast, setSaveToast] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [showBulkPrint, setShowBulkPrint] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sampleProductId, setSampleProductId] = useState<string>(() => (products[0] ? products[0].id : ''));
   const [selectedProducts, setSelectedProducts] = useState<{ [id: string]: number }>({});
@@ -227,6 +229,8 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     h: typeof window !== 'undefined' ? window.innerHeight : 667,
   });
 
+  const overflowRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     const handleResize = () => {
       setViewportSize({ w: window.innerWidth, h: window.innerHeight });
@@ -234,6 +238,18 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    };
+    if (showOverflowMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOverflowMenu]);
 
   const isNative = printerBridge.isNativeShell();
   const [btAvailable] = useState(() => printerBridge.isBluetoothAvailable());
@@ -288,7 +304,9 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  const isDirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
+  const isDirty = useMemo(() => {
+    return JSON.stringify(config) !== JSON.stringify(savedConfig);
+  }, [config, savedConfig]);
 
   const updateConfig = (updater: (prev: LabelConfig) => LabelConfig) => {
     setConfig(prev => {
@@ -306,7 +324,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       printerBridge.saveLastPrinter(selectedAddress, dev?.name || printerName || selectedAddress);
     }
     setSaveToast(true);
-    setTimeout(() => setSaveToast(false), 3000);
+    setTimeout(() => setSaveToast(false), 2500);
   };
 
   const handleResetDefaults = () => {
@@ -318,7 +336,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     setSavedConfig(fresh);
     saveLabelConfig(fresh);
     setSaveToast(true);
-    setTimeout(() => setSaveToast(false), 3000);
+    setTimeout(() => setSaveToast(false), 2500);
   };
 
   const handleResetElementSizes = () => {
@@ -416,11 +434,11 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
   const maxCanvasW = isFullscreen
     ? (isMobile ? viewportSize.w - 24 : viewportSize.w - 80)
-    : (isMobile ? Math.min(viewportSize.w - 64, 320) : 320);
+    : (isMobile ? Math.min(viewportSize.w - 48, 300) : 300);
 
   const maxCanvasH = isFullscreen
     ? (isMobile ? viewportSize.h - 140 : viewportSize.h - 160)
-    : 160;
+    : 150;
 
   const basePreviewScale = Math.min(
     maxCanvasW / effLabelWidth,
@@ -616,7 +634,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     { id: 'appearance', label: 'Appearance', icon: SlidersHorizontal },
     { id: 'printer', label: 'Printer', icon: Printer },
     { id: 'advanced', label: 'Advanced', icon: Settings2 },
-    { id: 'bulk', label: 'Bulk Print', icon: Layers },
   ];
 
   return (
@@ -738,7 +755,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       )}
 
       {/* A. Compact Responsive Header */}
-      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-2.5 sticky top-0 z-20 backdrop-blur-md bg-white/95">
         <div className="flex items-center space-x-2.5 min-w-0">
           <div className="p-2 bg-black text-white rounded-xl shadow-xs shrink-0">
             <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -783,16 +800,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
           <button
             type="button"
-            onClick={() => setShowResetConfirm(true)}
-            className="p-1.5 sm:px-2.5 sm:py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1"
-            title="Reset layout to standard defaults"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
-
-          <button
-            type="button"
             onClick={handleSaveSettings}
             disabled={!isDirty}
             className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
@@ -804,6 +811,69 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
             <Save className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{isDirty ? 'Save Changes' : 'Saved'}</span>
           </button>
+
+          {/* Overflow Menu */}
+          <div className="relative" ref={overflowRef}>
+            <button
+              type="button"
+              onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+              className="p-1.5 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+              title="More Actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showOverflowMenu && (
+              <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-30 animate-fade-in text-xs font-bold text-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFullscreen(true);
+                    setShowOverflowMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Fullscreen Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleTestPrint();
+                    setShowOverflowMenu(false);
+                  }}
+                  disabled={!btConnected || btPrinting}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 cursor-pointer disabled:opacity-40"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Print Test Label</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkPrint(!showBulkPrint);
+                    setShowOverflowMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5 text-slate-500" />
+                  <span>{showBulkPrint ? 'Hide Bulk Print' : 'Bulk Print Inventory'}</span>
+                </button>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetConfirm(true);
+                    setShowOverflowMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-800 flex items-center gap-2 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Reset to Defaults</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -828,7 +898,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
         
         {/* B. Live Label Preview — Prominent Column on Desktop, Top on Mobile */}
-        <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-4 space-y-4">
+        <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-16 space-y-4">
           <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -856,7 +926,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                     type="button"
                     onClick={handleResetZoom}
                     className="px-1.5 py-0.5 text-[10px] font-bold text-slate-800 hover:bg-slate-200 rounded cursor-pointer font-mono"
-                    title="Reset Zoom"
+                    title="Reset Zoom (Fit)"
                   >
                     {Math.round(zoomFactor * 100)}%
                   </button>
@@ -1115,7 +1185,10 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700">Barcode Symbology</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Barcode Symbology</span>
+                    <span className="text-[10px] text-slate-500 font-medium">Standard 1D retail barcode format</span>
+                  </div>
                   <span className="font-mono bg-black text-white px-2.5 py-0.5 rounded-lg text-xs font-extrabold">CODE 128</span>
                 </div>
               </div>
@@ -1412,8 +1485,49 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
             </div>
           )}
 
-          {/* TAB 6: BULK PRINT */}
-          {activeTab === 'bulk' && (
+          {/* G. Bottom Action Bar */}
+          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Defaults</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkPrint(!showBulkPrint)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  showBulkPrint
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>{showBulkPrint ? 'Close Bulk Print' : `Bulk Print (${printItemsList.length})`}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveSettings}
+                disabled={!isDirty}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                  isDirty
+                    ? 'bg-black text-white hover:bg-gray-800 active:scale-95'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <Save className="w-4 h-4" />
+                <span>{isDirty ? 'Save Changes' : 'Saved'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Bulk Inventory Label Print Drawer / Card */}
+          {showBulkPrint && (
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3.5 animate-fade-in">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1462,7 +1576,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 />
               </div>
 
-              <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
                 {filteredProducts.length === 0 ? (
                   <p className="text-center py-6 text-xs text-slate-400">No products found.</p>
                 ) : (
@@ -1507,32 +1621,6 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
               </div>
             </div>
           )}
-
-          {/* G. Bottom Action Bar */}
-          <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset to Defaults</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSaveSettings}
-              disabled={!isDirty}
-              className={`px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                isDirty
-                  ? 'bg-black text-white hover:bg-gray-800 active:scale-95'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <Save className="w-4 h-4" />
-              <span>{isDirty ? 'Save Changes' : 'Saved'}</span>
-            </button>
-          </div>
 
         </div>
 
