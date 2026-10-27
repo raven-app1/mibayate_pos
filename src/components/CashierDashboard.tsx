@@ -694,22 +694,24 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     <div className="h-full w-full flex flex-col bg-slate-50 overflow-hidden">
       {/* Top Header Bar */}
       <header className="bg-white border-b border-slate-200/80 shrink-0 safe-area-top z-30">
-        <div className="flex items-center justify-between px-4 sm:px-6 h-14">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-black text-white rounded-xl flex items-center justify-center font-black text-lg shadow-xs">
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-6 h-14">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-9 h-9 bg-black text-white rounded-xl flex items-center justify-center font-black text-lg shadow-xs shrink-0">
               {businessProfile.name ? businessProfile.name.charAt(0).toUpperCase() : 'M'}
             </div>
-            <div>
-              <h1 className="text-sm font-bold text-slate-900 tracking-tight">
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight truncate">
                 {businessProfile.name || 'Mibayate POS'}
               </h1>
-              <p className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse-soft inline-block" />
-                {user.branch_name || 'Main Store'} • Cashier: <strong className="text-slate-800">{user.name}</strong>
+              <p className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse-soft inline-block shrink-0" />
+                <span className="truncate">
+                  {user.branch_name || 'Main Store'} • Cashier: <strong className="text-slate-800">{user.name}</strong>
+                </span>
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -722,6 +724,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
               title="Bluetooth Receipt Printer Setup"
+              aria-label={btConnected ? 'Bluetooth receipt printer connected' : 'Connect Bluetooth receipt printer'}
             >
               <Printer className="w-3.5 h-3.5" />
               <span className="hidden md:inline max-w-[120px] truncate">
@@ -740,6 +743,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
               onClick={() => setShowUiSizeModal(true)} 
               className="p-2.5 text-slate-500 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all cursor-pointer"
               title="Adjust UI & Display size"
+              aria-label="Adjust UI and display size"
             >
               <SlidersHorizontal className="w-4.5 h-4.5" />
             </button>
@@ -747,6 +751,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
               onClick={() => { loadProducts(); }} 
               className="p-2.5 text-slate-500 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all cursor-pointer"
               title="Refresh inventory"
+              aria-label="Refresh inventory"
             >
               <RefreshCw className={`w-4.5 h-4.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -754,6 +759,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
               onClick={() => { if (confirm('Are you sure you want to log out?')) onLogout(); }}
               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all cursor-pointer hidden sm:flex"
               title="Log out"
+              aria-label="Log out"
             >
               <LogOut className="w-4.5 h-4.5" />
             </button>
@@ -1429,6 +1435,13 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 </div>
                 <p className="text-slate-500 text-[11px] font-medium">
                   {saleToDelete.items.length} items • {new Date(saleToDelete.created_at).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-500" />
+                <p>
+                  This receipt is not deleted immediately. The store owner must review and approve the request, and an approved void cannot be undone.
                 </p>
               </div>
 

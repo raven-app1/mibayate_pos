@@ -27,7 +27,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { SaleWithItems, SaleDeleteRequest, UserProfile, BusinessProfile } from '../types';
-import { formatCurrency, formatDate, formatTime } from '../utils/format';
+import { formatCurrency, formatDate, formatDateShort, formatTime } from '../utils/format';
 import { exportSalesReportToXlsx } from '../utils/excelExport';
 import { useToast } from '../utils/toast';
 import { useBackDismiss } from '../lib/backNavigation';
@@ -79,6 +79,7 @@ export default function CashierSalesHistory({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const sortDropdownRef = useRef<HTMLDivElement | null>(null);
+  const sortButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -86,10 +87,20 @@ export default function CashierSalesHistory({
         setShowSortDropdown(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSortDropdown(false);
+        sortButtonRef.current?.focus();
+      }
+    };
     if (showSortDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [showSortDropdown]);
 
   const sortOptions: Array<{ id: SortOption; label: string }> = [
@@ -100,6 +111,11 @@ export default function CashierSalesHistory({
   ];
 
   const selectedSortLabel = sortOptions.find(o => o.id === sortBy)?.label || 'Newest First';
+  const selectedSortShortLabel =
+    sortBy === 'oldest' ? 'Oldest'
+      : sortBy === 'amount_high' ? 'Highest'
+        : sortBy === 'amount_low' ? 'Lowest'
+          : 'Newest';
 
   useBackDismiss(selectedSale !== null, () => setSelectedSale(null));
 
@@ -119,20 +135,12 @@ export default function CashierSalesHistory({
     let count = 0;
     if (datePreset !== 'all') count++;
     if (paymentFilter !== 'all') count++;
-    if (minAmount.trim() || maxAmount.trim()) count++;
-    return count;
-  }, [datePreset, paymentFilter, minAmount, maxAmount]);
-
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (searchQuery.trim()) count++;
-    if (datePreset !== 'all') count++;
-    if (paymentFilter !== 'all') count++;
     if (statusFilter !== 'all') count++;
     if (minAmount.trim() || maxAmount.trim()) count++;
-    if (sortBy !== 'newest') count++;
     return count;
-  }, [searchQuery, datePreset, paymentFilter, statusFilter, minAmount, maxAmount, sortBy]);
+  }, [datePreset, paymentFilter, statusFilter, minAmount, maxAmount]);
+
+  const hasActiveFilters = appliedFilterCount > 0 || searchQuery.trim().length > 0;
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -286,6 +294,15 @@ export default function CashierSalesHistory({
     deleteRequestMap
   ]);
 
+  const receiptCountLabel = useMemo(() => {
+    const filtered = filteredSales.length;
+    const total = sales.length;
+    if (filtered === total) {
+      return `${total} ${total === 1 ? 'receipt' : 'receipts'}`;
+    }
+    return `${filtered} of ${total} receipts`;
+  }, [filteredSales.length, sales.length]);
+
   const handleExportExcel = () => {
     if (filteredSales.length === 0) {
       toast('No sales history to export', 'warning');
@@ -430,21 +447,18 @@ export default function CashierSalesHistory({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto android-scroll px-3 sm:px-6 pt-3 pb-24 sm:pb-8 max-w-7xl mx-auto w-full space-y-3 sm:space-y-4">
+    <div className="flex-1 overflow-y-auto android-scroll px-3 sm:px-6 pt-3 pb-6 sm:pb-8 max-w-7xl mx-auto w-full space-y-3">
       {/* Top Header Card */}
       <div className="android-card p-3 sm:p-4 border border-slate-200/80 bg-white">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-start justify-between gap-2.5 sm:items-center">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
               <History className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight truncate">
                 Sales History
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium truncate">
-                <span className="font-semibold text-slate-700">{user.name}</span> • {user.branch_name || 'Main Branch'}
-              </p>
             </div>
           </div>
 
@@ -453,7 +467,7 @@ export default function CashierSalesHistory({
               type="button"
               onClick={handleExportExcel}
               disabled={filteredSales.length === 0}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+              className="inline-flex items-center justify-center gap-1 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
               title="Export filtered sales to Excel"
               aria-label="Export to Excel"
             >
@@ -464,7 +478,7 @@ export default function CashierSalesHistory({
             <button
               type="button"
               onClick={onRefresh}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer shadow-2xs"
+              className="inline-flex items-center justify-center gap-1 w-10 h-10 sm:w-auto sm:h-auto sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer shadow-2xs"
               title="Reload receipts from database"
               aria-label="Refresh receipts"
             >
@@ -473,6 +487,18 @@ export default function CashierSalesHistory({
             </button>
           </div>
         </div>
+
+        <p className="mt-2 text-[10px] sm:text-[11px] text-slate-500 font-medium flex items-center gap-1 min-w-0">
+          <span className="font-bold text-slate-700 shrink-0" aria-live="polite">
+            {receiptCountLabel}
+          </span>
+          <span aria-hidden="true" className="text-slate-300 shrink-0">•</span>
+          <span className="truncate" title={user.name}>{user.name}</span>
+          <span aria-hidden="true" className="text-slate-300 shrink-0">•</span>
+          <span className="truncate" title={user.branch_name || 'Main Branch'}>
+            {user.branch_name || 'Main Branch'}
+          </span>
+        </p>
       </div>
 
       {/* Controls Card: Search bar + Filter & Sort row */}
@@ -482,16 +508,26 @@ export default function CashierSalesHistory({
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            spellCheck={false}
             placeholder="Search receipts, customers, phone..."
+            aria-label="Search receipts by ID, customer, phone, or item"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 sm:h-12 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-black transition-all shadow-2xs"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && searchQuery) setSearchQuery('');
+            }}
+            className={`w-full h-11 sm:h-12 min-w-0 pl-10 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-[13px] sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 placeholder:text-[11px] sm:placeholder:text-sm focus:outline-none focus:border-black transition-all shadow-2xs ${
+              searchQuery ? 'pr-9' : 'pr-3'
+            }`}
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-0 min-w-0 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
               aria-label="Clear search"
             >
               <X className="w-3.5 h-3.5" />
@@ -499,69 +535,77 @@ export default function CashierSalesHistory({
           )}
         </div>
 
-        {/* Row below search bar: Results count on left, Filters + Sort aligned right */}
-        <div className="flex items-center justify-between gap-2 pt-0.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-bold text-slate-500 truncate">
-              {filteredSales.length} {filteredSales.length === 1 ? 'receipt' : 'receipts'}
-            </span>
-
-            {/* Desktop View Switcher */}
-            <div className="hidden sm:flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
-              <button
-                type="button"
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  viewMode === 'table' ? 'bg-white text-black shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-                }`}
-                title="Table view"
-              >
-                <TableIcon className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  viewMode === 'cards' ? 'bg-white text-black shadow-2xs' : 'text-slate-500 hover:text-slate-900'
-                }`}
-                title="Cards view"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {/* One filter entry point + sort; full-width rows on narrow screens */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden xl:flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`min-h-0 p-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'table' ? 'bg-white text-black shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+              title="Table view"
+              aria-label="Table view"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`min-h-0 p-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'cards' ? 'bg-white text-black shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+              title="Cards view"
+              aria-label="Cards view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* The Main Single Filter Button */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:items-center">
             <button
               type="button"
               onClick={() => setShowFilterDrawer(true)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+              className={`inline-flex w-full min-w-0 items-center justify-center gap-1.5 px-2.5 py-1.5 sm:w-auto sm:justify-start sm:px-3 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
                 appliedFilterCount > 0
                   ? 'bg-black text-white border-black'
                   : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
               }`}
+              aria-label={
+                appliedFilterCount > 0
+                  ? `Filters (${appliedFilterCount}) — open filter options`
+                  : 'Filters — open filter options'
+              }
             >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : 'Filters'}</span>
+              <Filter className="w-3.5 h-3.5 shrink-0" />
+              <span className="min-w-0 truncate">
+                {appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : 'Filters'}
+              </span>
             </button>
 
-            {/* Custom Sort Dropdown */}
-            <div className="relative" ref={sortDropdownRef}>
+            <div className="relative min-w-0" ref={sortDropdownRef}>
               <button
+                ref={sortButtonRef}
                 type="button"
                 onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-1.5 px-2.5 py-1.5 sm:w-auto sm:justify-start sm:px-3 sm:py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
                 aria-haspopup="listbox"
                 aria-expanded={showSortDropdown}
+                aria-label={`Sort receipts: ${selectedSortLabel}`}
+                title={`Sort: ${selectedSortLabel}`}
               >
-                <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                <span>{selectedSortLabel}</span>
-                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${showSortDropdown ? 'rotate-180' : ''}`} />
+                <ArrowUpDown className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+                <span className="min-w-0 truncate sm:hidden">{selectedSortShortLabel}</span>
+                <span className="hidden min-w-0 truncate sm:inline">{selectedSortLabel}</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 shrink-0 text-slate-400 transition-transform duration-150 ${
+                    showSortDropdown ? 'rotate-180' : ''
+                  }`}
+                />
               </button>
 
               {showSortDropdown && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-2xl border border-slate-200 shadow-xl py-1 z-30 animate-fade-in">
+                <div className="absolute right-0 top-full mt-1.5 w-44 max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-slate-200 shadow-xl py-1 z-30 animate-fade-in">
                   {sortOptions.map((opt) => (
                     <button
                       key={opt.id}
@@ -570,14 +614,14 @@ export default function CashierSalesHistory({
                         setSortBy(opt.id);
                         setShowSortDropdown(false);
                       }}
-                      className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                      className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                         sortBy === opt.id
                           ? 'bg-slate-100 text-black'
                           : 'text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      <span>{opt.label}</span>
-                      {sortBy === opt.id && <Check className="w-3.5 h-3.5 text-black" />}
+                      <span className="min-w-0 truncate">{opt.label}</span>
+                      {sortBy === opt.id && <Check className="w-3.5 h-3.5 shrink-0 text-black" />}
                     </button>
                   ))}
                 </div>
@@ -587,47 +631,65 @@ export default function CashierSalesHistory({
         </div>
 
         {/* Active Filter Chips */}
-        {(appliedFilterCount > 0 || searchQuery.trim()) && (
+        {hasActiveFilters && (
           <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100 text-xs">
             <span className="text-[11px] font-bold text-slate-500">Active:</span>
 
             {searchQuery.trim() && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
-                <span>Search: &ldquo;{searchQuery.trim()}&rdquo;</span>
-                <button type="button" onClick={() => setSearchQuery('')} className="hover:text-black cursor-pointer">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span className="truncate">Search: &ldquo;{searchQuery.trim()}&rdquo;</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="min-h-0 min-w-0 shrink-0 p-0.5 hover:text-black cursor-pointer"
+                  aria-label="Clear search filter"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
 
             {datePreset !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
-                <span>Date: {getDatePresetLabel(datePreset)}</span>
-                <button type="button" onClick={() => setDatePreset('all')} className="hover:text-black cursor-pointer">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span className="truncate">Date: {getDatePresetLabel(datePreset)}</span>
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('all')}
+                  className="min-h-0 min-w-0 shrink-0 p-0.5 hover:text-black cursor-pointer"
+                  aria-label="Clear date filter"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
 
             {paymentFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
-                <span>Payment: {getPaymentLabel(paymentFilter)}</span>
-                <button type="button" onClick={() => setPaymentFilter('all')} className="hover:text-black cursor-pointer">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span className="truncate">Payment: {getPaymentLabel(paymentFilter)}</span>
+                <button
+                  type="button"
+                  onClick={() => setPaymentFilter('all')}
+                  className="min-h-0 min-w-0 shrink-0 p-0.5 hover:text-black cursor-pointer"
+                  aria-label="Clear payment filter"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
 
             {(minAmount.trim() || maxAmount.trim()) && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
-                <span>Amount: {minAmount.trim() ? `${minAmount} Ks` : '0 Ks'} - {maxAmount.trim() ? `${maxAmount} Ks` : 'Any'}</span>
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span className="truncate">
+                  Amount: {minAmount.trim() ? `${minAmount} Ks` : '0 Ks'} - {maxAmount.trim() ? `${maxAmount} Ks` : 'Any'}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
                     setMinAmount('');
                     setMaxAmount('');
                   }}
-                  className="hover:text-black cursor-pointer"
+                  className="min-h-0 min-w-0 shrink-0 p-0.5 hover:text-black cursor-pointer"
+                  aria-label="Clear amount filter"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -635,9 +697,14 @@ export default function CashierSalesHistory({
             )}
 
             {statusFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
-                <span>Status: {statusFilter.toUpperCase()}</span>
-                <button type="button" onClick={() => setStatusFilter('all')} className="hover:text-black cursor-pointer">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span className="truncate">Status: {statusFilter.toUpperCase()}</span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="min-h-0 min-w-0 shrink-0 p-0.5 hover:text-black cursor-pointer"
+                  aria-label="Clear status filter"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -646,7 +713,7 @@ export default function CashierSalesHistory({
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-black underline cursor-pointer ml-auto"
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-black underline cursor-pointer ml-auto"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Reset All</span>
@@ -658,7 +725,7 @@ export default function CashierSalesHistory({
       {/* Content Area: Loading, Empty, or Sales List */}
       {isLoading ? (
         <div className="android-card p-12 border border-slate-200/80 bg-white flex flex-col items-center justify-center text-slate-400">
-          <div className="w-8 h-8 border-3 border-gray-900/20 border-t-gray-900 rounded-full animate-spin mb-3" />
+          <div className="w-8 h-8 border-[3px] border-gray-900/20 border-t-gray-900 rounded-full animate-spin mb-3" />
           <span className="text-xs font-bold text-slate-600">Loading sales history...</span>
         </div>
       ) : sales.length === 0 ? (
@@ -698,7 +765,7 @@ export default function CashierSalesHistory({
       ) : (
         <>
           {/* DESKTOP TABLE VIEW */}
-          <div className={`${viewMode === 'table' ? 'hidden sm:block' : 'hidden'} android-card border border-slate-200/80 bg-white overflow-hidden shadow-2xs`}>
+          <div className={`${viewMode === 'table' ? 'hidden xl:block' : 'hidden'} android-card border border-slate-200/80 bg-white overflow-hidden shadow-2xs`}>
             <div className="overflow-x-auto android-scroll">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -758,7 +825,9 @@ export default function CashierSalesHistory({
                         </td>
 
                         <td className="py-3.5 px-4 max-w-[200px]">
-                          <div className="font-bold text-slate-700">{sale.items?.length || 0} items</div>
+                          <div className="font-bold text-slate-700">
+                            {sale.items?.length || 0} {sale.items?.length === 1 ? 'item' : 'items'}
+                          </div>
                           <div className="text-[11px] text-slate-400 truncate" title={itemsSummary}>
                             {itemsSummary || 'No item details'}
                           </div>
@@ -773,7 +842,7 @@ export default function CashierSalesHistory({
                         </td>
 
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <div className="font-mono font-black text-slate-950 text-sm">
+                          <div className="font-mono font-black text-slate-950 text-sm tabular-nums">
                             {formatCurrency(sale.total_amount)}
                           </div>
                           {sale.discount > 0 && (
@@ -826,7 +895,7 @@ export default function CashierSalesHistory({
           </div>
 
           {/* CARDS VIEW (Mobile & Alternative Desktop Grid) */}
-          <div className={`${viewMode === 'cards' ? 'grid' : 'grid sm:hidden'} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3`}>
+          <div className={`${viewMode === 'cards' ? 'grid' : 'grid xl:hidden'} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3`}>
             {filteredSales.map((sale) => {
               const req = deleteRequestMap.get(sale.id);
               const isCopied = copiedId === sale.id;
@@ -835,20 +904,20 @@ export default function CashierSalesHistory({
                 <div
                   key={sale.id}
                   onClick={() => setSelectedSale(sale)}
-                  className="android-card p-3 sm:p-3.5 border border-slate-200/90 bg-white hover:border-slate-400 transition-all cursor-pointer group shadow-2xs space-y-2.5"
+                  className="android-card min-w-0 p-3 sm:p-3.5 border border-slate-200/90 bg-white hover:border-slate-400 transition-all cursor-pointer group shadow-2xs flex flex-col gap-2"
                 >
                   {/* Section 1, 2, 3: Header Row */}
                   <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       {/* 1. Receipt ID & Copy */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-bold text-slate-900 text-xs tracking-tight">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="font-mono font-bold text-slate-900 text-xs tracking-tight truncate" title={sale.id}>
                           #{sale.id.slice(0, 8)}
                         </span>
                         <button
                           type="button"
                           onClick={(e) => handleCopyId(sale.id, e)}
-                          className="p-1 text-slate-400 hover:text-black rounded transition-colors cursor-pointer"
+                          className="min-h-0 min-w-0 shrink-0 p-2 -my-1 text-slate-400 hover:text-black hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
                           title="Copy full receipt ID"
                           aria-label="Copy receipt ID"
                         >
@@ -857,20 +926,20 @@ export default function CashierSalesHistory({
                       </div>
 
                       {/* 3. Date & Time */}
-                      <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                      <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5 min-w-0 whitespace-nowrap">
                         <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{formatDateShort(sale.created_at)}</span>
+                        <span aria-hidden="true">•</span>
                         <span>{formatTime(sale.created_at)}</span>
-                        <span>•</span>
-                        <span>{formatDate(sale.created_at)}</span>
                       </div>
                     </div>
 
                     {/* 2. Total Amount & Item Count */}
                     <div className="text-right shrink-0">
-                      <div className="font-mono font-black text-slate-950 text-base leading-tight">
+                      <div className="font-mono font-black text-slate-950 text-base leading-tight tabular-nums">
                         {formatCurrency(sale.total_amount)}
                       </div>
-                      <span className="text-[10px] text-slate-500 font-medium">
+                      <span className="text-[10px] text-slate-500 font-medium tabular-nums">
                         {sale.items?.length || 0} {sale.items?.length === 1 ? 'item' : 'items'}
                       </span>
                     </div>
@@ -878,7 +947,7 @@ export default function CashierSalesHistory({
 
                   {/* Customer Row (if present) */}
                   {sale.customer_name && (
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-100">
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600 bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-100">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <User className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="font-semibold truncate leading-normal" title={sale.customer_name}>
@@ -886,7 +955,7 @@ export default function CashierSalesHistory({
                         </span>
                       </div>
                       {sale.customer_phone && (
-                        <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-2">
+                        <span className="font-mono text-[10px] text-slate-400 shrink-0 tabular-nums">
                           {sale.customer_phone}
                         </span>
                       )}
@@ -897,17 +966,17 @@ export default function CashierSalesHistory({
                   {sale.items && sale.items.length > 0 && (
                     <div className="bg-slate-50/60 rounded-xl p-2 border border-slate-100/90 space-y-1">
                       {sale.items.slice(0, 2).map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-2 text-[11px] text-slate-700">
+                        <div key={idx} className="flex items-center justify-between gap-2 text-[11px] text-slate-700 min-w-0">
                           <span className="truncate min-w-0 font-medium leading-normal" title={item.product_name}>
                             {item.product_name}
                           </span>
-                          <span className="font-mono text-slate-500 shrink-0 text-[10px] font-medium whitespace-nowrap">
+                          <span className="font-mono text-slate-500 shrink-0 text-[10px] font-medium whitespace-nowrap tabular-nums">
                             {item.quantity} × {formatCurrency(item.unit_price)}
                           </span>
                         </div>
                       ))}
                       {sale.items.length > 2 && (
-                        <div className="text-[10px] text-slate-400 font-medium pt-0.5">
+                        <div className="text-[10px] text-slate-400 font-medium pt-0.5 tabular-nums">
                           +{(sale.items.length - 2)} more {sale.items.length - 2 === 1 ? 'item' : 'items'}
                         </div>
                       )}
@@ -918,18 +987,18 @@ export default function CashierSalesHistory({
                   {req && (
                     <div className="pt-0.5">
                       {req.status === 'pending' && (
-                        <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center gap-1.5">
+                        <div className="px-2 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                           <span>Delete Request Pending</span>
                         </div>
                       )}
                       {req.status === 'approved' && (
-                        <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-bold line-through">
+                        <div className="px-2 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-bold line-through">
                           Voided and Approved by Owner
                         </div>
                       )}
                       {req.status === 'rejected' && (
-                        <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
+                        <div className="px-2 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
                           Delete Rejected {req.rejection_reason ? `(${req.rejection_reason})` : ''}
                         </div>
                       )}
@@ -937,16 +1006,16 @@ export default function CashierSalesHistory({
                   )}
 
                   {/* Section 5: Payment method & Actions */}
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex min-w-0 max-w-[55%] items-center">
                       {renderPaymentBadge(sale.payment_method)}
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         type="button"
                         onClick={() => onPrintReceipt(sale)}
-                        className="p-1.5 text-slate-500 hover:text-black hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        className="inline-flex min-h-10 min-w-10 items-center justify-center p-2 text-slate-500 hover:text-black hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                         title="Print thermal receipt"
                         aria-label="Print receipt"
                       >
@@ -957,7 +1026,7 @@ export default function CashierSalesHistory({
                         <button
                           type="button"
                           onClick={() => onRequestDelete(sale)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          className="inline-flex min-h-10 min-w-10 items-center justify-center p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Request delete / void receipt"
                           aria-label="Request delete"
                         >
@@ -968,7 +1037,8 @@ export default function CashierSalesHistory({
                       <button
                         type="button"
                         onClick={() => setSelectedSale(sale)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs active-scale"
+                        className="inline-flex min-h-10 items-center gap-1 px-3 py-2 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs active-scale"
+                        title="View receipt details"
                       >
                         <Eye className="w-3 h-3" />
                         <span>View</span>
@@ -1022,7 +1092,7 @@ export default function CashierSalesHistory({
           {/* Date Range Selector */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100">
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Date Range</label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {[
                 { id: 'all', label: 'All Dates' },
                 { id: 'today', label: 'Today' },
@@ -1138,19 +1208,20 @@ export default function CashierSalesHistory({
 
             {/* Modal Header */}
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-black text-white flex items-center justify-center shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-2xl bg-black text-white flex items-center justify-center shadow-xs shrink-0">
                   <ShoppingBag className="w-4.5 h-4.5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-sm text-slate-900">Receipt Details</h3>
-                    <span className="font-mono text-xs font-bold text-slate-500">#{selectedSale.id.slice(0, 8)}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-black text-sm text-slate-900 shrink-0">Receipt Details</h3>
+                    <span className="font-mono text-xs font-bold text-slate-500 truncate">#{selectedSale.id.slice(0, 8)}</span>
                     <button
                       type="button"
                       onClick={() => handleCopyId(selectedSale.id)}
-                      className="p-1 text-slate-400 hover:text-black rounded cursor-pointer"
+                      className="min-h-0 min-w-0 shrink-0 p-1.5 text-slate-400 hover:text-black rounded cursor-pointer"
                       title="Copy receipt ID"
+                      aria-label="Copy receipt ID"
                     >
                       {copiedId === selectedSale.id ? <Check className="w-3 h-3 text-black" /> : <Copy className="w-3 h-3" />}
                     </button>
@@ -1165,6 +1236,7 @@ export default function CashierSalesHistory({
                 type="button"
                 onClick={() => setSelectedSale(null)}
                 className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                aria-label="Close receipt details"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1205,12 +1277,12 @@ export default function CashierSalesHistory({
                   {selectedSale.items?.map((item, idx) => (
                     <div key={idx} className="p-3 flex items-center justify-between gap-3 text-xs">
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-900 truncate">{item.product_name}</div>
-                        <div className="text-[11px] text-slate-400 font-medium">
+                        <div className="font-bold text-slate-900 truncate" title={item.product_name}>{item.product_name}</div>
+                        <div className="text-[11px] text-slate-400 font-medium tabular-nums">
                           {item.quantity} × {formatCurrency(item.unit_price)}
                         </div>
                       </div>
-                      <div className="font-mono font-bold text-slate-900 text-right shrink-0">
+                      <div className="font-mono font-bold text-slate-900 text-right shrink-0 tabular-nums">
                         {formatCurrency(item.total)}
                       </div>
                     </div>
@@ -1228,18 +1300,18 @@ export default function CashierSalesHistory({
                     <>
                       <div className="flex justify-between text-slate-600">
                         <span>Subtotal</span>
-                        <span className="font-mono font-medium">{formatCurrency(displaySubtotal)}</span>
+                        <span className="font-mono font-medium tabular-nums">{formatCurrency(displaySubtotal)}</span>
                       </div>
                       {selectedSale.discount > 0 && (
                         <div className="flex justify-between text-red-600 font-medium">
                           <span>Discount</span>
-                          <span className="font-mono">-{formatCurrency(selectedSale.discount)}</span>
+                          <span className="font-mono tabular-nums">-{formatCurrency(selectedSale.discount)}</span>
                         </div>
                       )}
                       {saleTax > 0 && (
                         <div className="flex justify-between text-slate-600 font-medium">
                           <span>Tax</span>
-                          <span className="font-mono font-medium">{formatCurrency(saleTax)}</span>
+                          <span className="font-mono font-medium tabular-nums">{formatCurrency(saleTax)}</span>
                         </div>
                       )}
                     </>
@@ -1247,7 +1319,7 @@ export default function CashierSalesHistory({
                 })()}
                 <div className="flex justify-between text-sm font-black text-slate-950 pt-2 border-t border-slate-200">
                   <span>TOTAL AMOUNT</span>
-                  <span className="font-mono text-base">{formatCurrency(selectedSale.total_amount)}</span>
+                  <span className="font-mono text-base tabular-nums">{formatCurrency(selectedSale.total_amount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1">
                   <span>Payment Method:</span>
@@ -1275,7 +1347,7 @@ export default function CashierSalesHistory({
             </div>
 
             {/* Modal Actions */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex items-center gap-2.5 shrink-0 safe-area-bottom">
+            <div className="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-slate-100 bg-slate-50/80 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
               {(!deleteRequestMap.get(selectedSale.id) || deleteRequestMap.get(selectedSale.id)?.status === 'rejected') && (
                 <button
                   type="button"
@@ -1284,7 +1356,7 @@ export default function CashierSalesHistory({
                     setSelectedSale(null);
                     onRequestDelete(sale);
                   }}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  className="flex w-full sm:w-auto min-h-11 items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer shadow-2xs"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Request Delete</span>
@@ -1298,7 +1370,7 @@ export default function CashierSalesHistory({
                   setSelectedSale(null);
                   onPrintReceipt(sale);
                 }}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-black text-white hover:bg-gray-800 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-98"
+                className="flex w-full sm:flex-1 min-h-11 items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-black text-white hover:bg-gray-800 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-98"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Print Thermal Receipt</span>

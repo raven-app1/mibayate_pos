@@ -95,7 +95,7 @@ export default function FilterDrawer({
           {children}
         </div>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex items-center gap-2.5 shrink-0 safe-area-bottom">
+        <div className="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-slate-100 bg-slate-50/80 flex items-center gap-2.5 shrink-0">
           {onReset && (
             <button
               type="button"

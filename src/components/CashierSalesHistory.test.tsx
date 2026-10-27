@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import CashierSalesHistory from './CashierSalesHistory';
-import { SaleWithItems, UserProfile, BusinessProfile } from '../types';
+import { SaleWithItems, SaleDeleteRequest, UserProfile, BusinessProfile } from '../types';
 
 const mockUser: UserProfile = {
   id: 'cashier-1',
@@ -197,6 +197,93 @@ describe('CashierSalesHistory Component', () => {
 
     expect(screen.getByText('No receipts found')).toBeInTheDocument();
     expect(screen.getByText('Try changing your search or filters.')).toBeInTheDocument();
+  });
+
+  it('shows the receipt count once in the summary and updates it when filtered', () => {
+    render(
+      <CashierSalesHistory
+        sales={mockSales}
+        deleteRequests={[]}
+        isLoading={false}
+        onRefresh={vi.fn()}
+        user={mockUser}
+        businessProfile={mockBusinessProfile}
+        onRequestDelete={vi.fn()}
+        onPrintReceipt={vi.fn()}
+        onStartSelling={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText('3 receipts')).toHaveLength(1);
+
+    fireEvent.change(screen.getByPlaceholderText('Search receipts, customers, phone...'), {
+      target: { value: 'Su Su' }
+    });
+
+    expect(screen.getByText('1 of 3 receipts')).toBeInTheDocument();
+    expect(screen.queryByText('3 receipts')).not.toBeInTheDocument();
+  });
+
+  it('clears the search with the Escape key', () => {
+    render(
+      <CashierSalesHistory
+        sales={mockSales}
+        deleteRequests={[]}
+        isLoading={false}
+        onRefresh={vi.fn()}
+        user={mockUser}
+        businessProfile={mockBusinessProfile}
+        onRequestDelete={vi.fn()}
+        onPrintReceipt={vi.fn()}
+        onStartSelling={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByPlaceholderText('Search receipts, customers, phone...');
+    fireEvent.change(searchInput, { target: { value: 'Croissant' } });
+    expect(searchInput).toHaveValue('Croissant');
+
+    fireEvent.keyDown(searchInput, { key: 'Escape' });
+
+    expect(searchInput).toHaveValue('');
+    expect(screen.getByText('3 receipts')).toBeInTheDocument();
+  });
+
+  it('counts status filters in the single filter entry badge', () => {
+    const pendingRequest: SaleDeleteRequest = {
+      id: 'req-1',
+      sale_id: 'sale-002',
+      cashier_id: 'cashier-1',
+      cashier_name: 'Aung Aung',
+      total_amount: 15000,
+      reason: 'Duplicate transaction',
+      status: 'pending',
+      requested_at: '2026-10-26T15:00:00Z'
+    };
+
+    render(
+      <CashierSalesHistory
+        sales={mockSales}
+        deleteRequests={[pendingRequest]}
+        isLoading={false}
+        onRefresh={vi.fn()}
+        user={mockUser}
+        businessProfile={mockBusinessProfile}
+        onRequestDelete={vi.fn()}
+        onPrintReceipt={vi.fn()}
+        onStartSelling={vi.fn()}
+      />
+    );
+
+    const filterButtons = screen.getAllByRole('button', { name: /Filters/i });
+    expect(filterButtons.length).toBe(1);
+    fireEvent.click(filterButtons[0]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apply Filters/i }));
+
+    expect(screen.getByRole('button', { name: /Filters \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByText('2 of 3 receipts')).toBeInTheDocument();
   });
 
   it('opens filter drawer with single filter button and filters by payment method with active count badge', () => {
