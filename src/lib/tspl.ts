@@ -39,6 +39,19 @@ const FONT_HEIGHT: Record<string, number> = {
   '5': 48,
 };
 
+export function fontSizeToPt(size: number | undefined, defaultPt = 12): number {
+  if (!size || size <= 0) return defaultPt;
+  if (size === 1) return 9;
+  if (size === 2) return 12;
+  if (size === 3) return 15;
+  if (size === 4) return 18;
+  return Math.min(Math.max(Math.round(size), 6), 48);
+}
+
+export function ptToDots(pt: number, dotsPerMm = 8): number {
+  return Math.max(9, Math.round(pt * (25.4 / 72) * dotsPerMm));
+}
+
 function encode(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
@@ -246,51 +259,46 @@ function prepareRasterLabel(opts: TsplLabelOptions): PreparedRasterLabel | null 
 
   if (hasLayout) {
     if (showStoreName && storeName && storePos) {
-      const size = storePos.size ?? 1;
-      const boxHeightDots = storePos.heightMm ? dots(storePos.heightMm, dotsPerMm) : 0;
+      const pt = fontSizeToPt(storePos.size, 12);
+      const px = ptToDots(pt, dotsPerMm);
       runs.push({
         text: storeName,
         xDots: dots(storePos.xMm, dotsPerMm),
         yDots: dots(storePos.yMm, dotsPerMm),
-        widthDots: Math.max(dots(storePos.widthMm ?? (widthMm - storePos.xMm), dotsPerMm), 20),
-        heightDots: boxHeightDots || undefined,
-        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.88 : 0.62))) : FONT_HEIGHT['3'] * size,
+        widthDots: Math.max(dots(widthMm - storePos.xMm, dotsPerMm), 20),
+        px,
         bold: true,
-        align: 'center',
+        align: 'left',
         maxLines: 1,
       });
     }
 
     if (showProductName && productName && productPos) {
-      const size = productPos.size ?? 1;
-      const boxHeightDots = productPos.heightMm
-        ? dots(productPos.heightMm, dotsPerMm)
-        : Math.max(heightDots - dots(productPos.yMm, dotsPerMm), 20);
+      const pt = fontSizeToPt(productPos.size, 10);
+      const px = ptToDots(pt, dotsPerMm);
       runs.push({
         text: productName,
         xDots: dots(productPos.xMm, dotsPerMm),
         yDots: dots(productPos.yMm, dotsPerMm),
-        widthDots: Math.max(dots(productPos.widthMm ?? (widthMm - productPos.xMm), dotsPerMm), 20),
-        heightDots: boxHeightDots,
-        px: productPos.heightMm ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.68 : 0.48))) : FONT_HEIGHT['2'] * size,
+        widthDots: Math.max(dots(widthMm - productPos.xMm, dotsPerMm), 20),
+        px,
         bold: true,
-        align: 'center',
+        align: 'left',
         maxLines: 2,
       });
     }
 
     if (showPrice && priceValue && pricePos) {
-      const size = pricePos.size ?? 1;
-      const boxHeightDots = pricePos.heightMm ? dots(pricePos.heightMm, dotsPerMm) : 0;
+      const pt = fontSizeToPt(pricePos.size, 13);
+      const px = ptToDots(pt, dotsPerMm);
       runs.push({
         text: priceValue,
         xDots: dots(pricePos.xMm, dotsPerMm),
         yDots: dots(pricePos.yMm, dotsPerMm),
-        widthDots: Math.max(dots(pricePos.widthMm ?? (widthMm - pricePos.xMm), dotsPerMm), 20),
-        heightDots: boxHeightDots || undefined,
-        px: boxHeightDots ? Math.max(9, Math.round(boxHeightDots * (size >= 2 ? 0.88 : 0.62))) : FONT_HEIGHT['3'] * size,
+        widthDots: Math.max(dots(widthMm - pricePos.xMm, dotsPerMm), 20),
+        px,
         bold: true,
-        align: 'center',
+        align: 'left',
         maxLines: 1,
       });
     }
@@ -485,28 +493,30 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
 
   if (hasLayout) {
     if (showStoreName && storeName && storePos) {
-      const size = storePos.size ?? 1;
+      const pt = fontSizeToPt(storePos.size, 12);
+      const sizeMultiplier = pt >= 16 ? 2 : 1;
       const x = dots(storePos.xMm, dotsPerMm) + offsetDots;
       const y = dots(storePos.yMm, dotsPerMm);
-      const available = Math.max(dots(storePos.widthMm ?? (widthMm - storePos.xMm), dotsPerMm), 20);
-      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
-      commands.push(textCommand(x, y, '3', size, truncate(storeName, maxChars)));
+      const available = Math.max(dots(widthMm - storePos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * sizeMultiplier)));
+      commands.push(textCommand(x, y, '3', sizeMultiplier, truncate(storeName, maxChars)));
     }
 
     if (showProductName && productName && productPos) {
-      const size = productPos.size ?? 1;
+      const pt = fontSizeToPt(productPos.size, 10);
+      const sizeMultiplier = pt >= 16 ? 2 : 1;
       const x = dots(productPos.xMm, dotsPerMm) + offsetDots;
       const y = dots(productPos.yMm, dotsPerMm);
-      const available = Math.max(dots(productPos.widthMm ?? (widthMm - productPos.xMm), dotsPerMm), 20);
-      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['2'] * size)));
-      const lineHeight = FONT_HEIGHT['2'] * size;
+      const available = Math.max(dots(widthMm - productPos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['2'] * sizeMultiplier)));
+      const lineHeight = FONT_HEIGHT['2'] * sizeMultiplier;
       const availableHeight = productPos.heightMm
         ? Math.max(dots(productPos.heightMm, dotsPerMm), lineHeight)
         : lineHeight;
       const maxLines = Math.max(1, Math.floor(availableHeight / lineHeight));
       const lines = wrapText(productName, maxChars).slice(0, maxLines);
       lines.forEach((line, index) => {
-        commands.push(textCommand(x, y + index * lineHeight, '2', size, line));
+        commands.push(textCommand(x, y + index * lineHeight, '2', sizeMultiplier, line));
       });
     }
 
@@ -525,13 +535,14 @@ export function buildTsplLabel(opts: TsplLabelOptions): Uint8Array {
     }
 
     if (showPrice && pricePos) {
-      const size = pricePos.size ?? 1;
+      const pt = fontSizeToPt(pricePos.size, 13);
+      const sizeMultiplier = pt >= 16 ? 2 : 1;
       const x = dots(pricePos.xMm, dotsPerMm) + offsetDots;
       const y = dots(pricePos.yMm, dotsPerMm);
-      const available = Math.max(dots(pricePos.widthMm ?? (widthMm - pricePos.xMm), dotsPerMm), 20);
-      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * size)));
+      const available = Math.max(dots(widthMm - pricePos.xMm, dotsPerMm), 20);
+      const maxChars = Math.max(1, Math.floor(available / (FONT_WIDTH['3'] * sizeMultiplier)));
       const priceText = `${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${currencySymbol}`.trim();
-      commands.push(textCommand(x, y, '3', size, truncate(priceText, maxChars)));
+      commands.push(textCommand(x, y, '3', sizeMultiplier, truncate(priceText, maxChars)));
     }
   } else {
     let cursorY = dots(1, dotsPerMm);

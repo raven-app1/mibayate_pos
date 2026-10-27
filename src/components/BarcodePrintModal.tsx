@@ -9,7 +9,7 @@ import { Product, LabelConfig } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
-import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
+import { buildTsplLabel, testPrintTspl, feedTspl, fontSizeToPt } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
 
@@ -311,10 +311,10 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const handleResetZoom = () => setZoomFactor(1);
 
   const layoutForPrint = {
-    storeName: showStoreName ? { xMm: effElemX('store'), yMm: effElemY('store'), widthMm: effElemW('store'), heightMm: effElemH('store'), size: fontSize.store as 1 | 2 } : undefined,
-    productName: showProductName ? { xMm: effElemX('product'), yMm: effElemY('product'), widthMm: effElemW('product'), heightMm: effElemH('product'), size: fontSize.product as 1 | 2 } : undefined,
+    storeName: showStoreName ? { xMm: effElemX('store'), yMm: effElemY('store'), size: fontSize.store } : undefined,
+    productName: showProductName ? { xMm: effElemX('product'), yMm: effElemY('product'), size: fontSize.product } : undefined,
     barcode: { xMm: effBarcodeX, yMm: effBarcodeY, widthMm: effBarcodeWidth, heightMm: effBarcodeHeight },
-    price: showPrice ? { xMm: effElemX('price'), yMm: effElemY('price'), widthMm: effElemW('price'), heightMm: effElemH('price'), size: fontSize.price as 1 | 2 } : undefined,
+    price: showPrice ? { xMm: effElemX('price'), yMm: effElemY('price'), size: fontSize.price } : undefined,
   };
 
   const printItemsList: Array<{ product: Product; labelIndex: number }> = [];
@@ -474,6 +474,101 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
         ? 'bg-black text-white border-black shadow-xs'
         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
     }`;
+
+  const ToggleSwitch: React.FC<{
+    checked: boolean;
+    onChange: (val: boolean) => void;
+    title?: string;
+  }> = ({ checked, onChange, title }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+        checked ? 'bg-black' : 'bg-slate-300'
+      }`}
+      title={title}
+    >
+      <div
+        className={`bg-white w-3.5 h-3.5 rounded-full shadow-xs transform transition-transform ${
+          checked ? 'translate-x-3.5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+
+  const FontSizeControl: React.FC<{
+    label?: string;
+    value: number;
+    onChange: (val: number) => void;
+    min?: number;
+    max?: number;
+  }> = ({ label = 'Font Size', value, onChange, min = 6, max = 36 }) => {
+    const currentPt = fontSizeToPt(value);
+    const presets = [8, 10, 11, 12, 14, 16, 18, 20];
+
+    return (
+      <div className="space-y-1.5">
+        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">
+          {label}
+        </label>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(Math.max(min, currentPt - 1))}
+            disabled={currentPt <= min}
+            className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer disabled:opacity-30 transition-colors shrink-0"
+            title="Decrease font size"
+          >
+            <Minus className="w-3 h-3" />
+          </button>
+          <div className="flex-1 relative">
+            <input
+              type="number"
+              min={min}
+              max={max}
+              step={1}
+              value={currentPt}
+              onChange={e => {
+                const n = parseInt(e.target.value, 10);
+                if (isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+              }}
+              className="w-full text-center py-1 px-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-gray-900"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 pointer-events-none">
+              pt
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange(Math.min(max, currentPt + 1))}
+            disabled={currentPt >= max}
+            className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer disabled:opacity-30 transition-colors shrink-0"
+            title="Increase font size"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pt-0.5">
+          {presets.map(pt => (
+            <button
+              key={pt}
+              type="button"
+              onClick={() => onChange(pt)}
+              className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer shrink-0 font-mono ${
+                currentPt === pt
+                  ? 'bg-black text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {pt}pt
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const renderSingleLabelCard = (productItem: Product) => (
     <LabelRasterPreview
@@ -818,102 +913,48 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                        </span>
                      </div>
 
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                     <FontSizeControl
+                       value={fontSize.store ?? 12}
+                       onChange={val => {
+                         setFontSize(prev => ({ ...prev, store: val }));
+                         updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: val } }));
+                       }}
+                     />
+
+                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelWidth}
-                           value={layoutXY.store.w !== undefined ? layoutXY.store.w : effElemW('store').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelWidth - 1)}
+                           value={layoutXY.store.x ?? '0'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, w: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, w: v } } }));
+                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, x: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, x: v } } }));
                            }}
                            className={numInputClass}
                          />
                        </div>
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelHeight}
-                           value={layoutXY.store.h !== undefined ? layoutXY.store.h : effElemH('store').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelHeight - 1)}
+                           value={layoutXY.store.y ?? '1'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, h: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, h: v } } }));
+                             setLayoutXY(prev => ({ ...prev, store: { ...prev.store, y: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, y: v } } }));
                            }}
                            className={numInputClass}
                          />
-                       </div>
-                       <div className="col-span-2 sm:col-span-1">
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
-                         <div className="flex gap-1">
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, store: 1 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 1 } }));
-                             }}
-                             className={miniSegBtn((fontSize.store ?? 1) === 1)}
-                           >
-                             Normal
-                           </button>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, store: 2 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: 2 } }));
-                             }}
-                             className={miniSegBtn((fontSize.store ?? 1) === 2)}
-                           >
-                             Large
-                           </button>
-                         </div>
                        </div>
                      </div>
-
-                     {showPositionControls && (
-                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelWidth - 1)}
-                             value={layoutXY.store.x ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, store: { ...prev.store, x: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, x: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelHeight - 1)}
-                             value={layoutXY.store.y ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, store: { ...prev.store, y: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, y: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                       </div>
-                     )}
                    </div>
 
                    {/* Product Title */}
@@ -928,102 +969,48 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                        </span>
                      </div>
 
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                     <FontSizeControl
+                       value={fontSize.product ?? 10}
+                       onChange={val => {
+                         setFontSize(prev => ({ ...prev, product: val }));
+                         updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: val } }));
+                       }}
+                     />
+
+                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelWidth}
-                           value={layoutXY.product.w !== undefined ? layoutXY.product.w : effElemW('product').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelWidth - 1)}
+                           value={layoutXY.product.x ?? '0'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, w: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, w: v } } }));
+                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, x: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, x: v } } }));
                            }}
                            className={numInputClass}
                          />
                        </div>
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelHeight}
-                           value={layoutXY.product.h !== undefined ? layoutXY.product.h : effElemH('product').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelHeight - 1)}
+                           value={layoutXY.product.y ?? '3.5'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, h: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, h: v } } }));
+                             setLayoutXY(prev => ({ ...prev, product: { ...prev.product, y: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, y: v } } }));
                            }}
                            className={numInputClass}
                          />
-                       </div>
-                       <div className="col-span-2 sm:col-span-1">
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
-                         <div className="flex gap-1">
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, product: 1 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 1 } }));
-                             }}
-                             className={miniSegBtn((fontSize.product ?? 1) === 1)}
-                           >
-                             Normal
-                           </button>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, product: 2 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: 2 } }));
-                             }}
-                             className={miniSegBtn((fontSize.product ?? 2) === 2)}
-                           >
-                             Large
-                           </button>
-                         </div>
                        </div>
                      </div>
-
-                     {showPositionControls && (
-                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelWidth - 1)}
-                             value={layoutXY.product.x ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, product: { ...prev.product, x: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, x: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelHeight - 1)}
-                             value={layoutXY.product.y ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, product: { ...prev.product, y: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, y: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                       </div>
-                     )}
                    </div>
 
                    {/* Barcode Box */}
@@ -1075,42 +1062,48 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                        </div>
                      </div>
 
-                     {showPositionControls && (
-                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelWidth - effBarcodeWidth)}
-                             value={layoutXY.barcode.x ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, x: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, x: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelHeight - effBarcodeHeight)}
-                             value={layoutXY.barcode.y ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, y: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, y: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
+                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={0}
+                           max={Math.max(0, effLabelWidth - effBarcodeWidth)}
+                           value={layoutXY.barcode.x ?? '0'}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, x: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, x: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
                        </div>
-                     )}
+                       <div>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
+                         <input
+                           type="number"
+                           step={0.5}
+                           min={0}
+                           max={Math.max(0, effLabelHeight - effBarcodeHeight)}
+                           value={layoutXY.barcode.y ?? '8'}
+                           onChange={e => {
+                             const v = e.target.value;
+                             setLayoutXY(prev => ({ ...prev, barcode: { ...prev.barcode, y: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, y: v } } }));
+                           }}
+                           className={numInputClass}
+                         />
+                       </div>
+                     </div>
+
+                     <div className="flex items-center justify-between text-xs py-1 border-t border-slate-200/60">
+                       <span className="text-[10px] font-semibold text-slate-700">Display Code Text (HRI)</span>
+                       <ToggleSwitch checked={showCodeText} onChange={val => {
+                         setShowCodeText(val);
+                         updateConfig(p => ({ ...p, showCodeText: val }));
+                       }} />
+                     </div>
                    </div>
 
                    {/* Selling Price */}
@@ -1125,114 +1118,48 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                        </span>
                      </div>
 
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                     <FontSizeControl
+                       value={fontSize.price ?? 13}
+                       onChange={val => {
+                         setFontSize(prev => ({ ...prev, price: val }));
+                         updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: val } }));
+                       }}
+                     />
+
+                     <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Width (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelWidth}
-                           value={layoutXY.price.w !== undefined ? layoutXY.price.w : effElemW('price').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelWidth - 1)}
+                           value={layoutXY.price.x ?? '0'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, w: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, w: v } } }));
+                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, x: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, x: v } } }));
                            }}
                            className={numInputClass}
                          />
                        </div>
                        <div>
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Height (mm)</label>
+                         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
                          <input
                            type="number"
                            step={0.5}
-                           min={1}
-                           max={effLabelHeight}
-                           value={layoutXY.price.h !== undefined ? layoutXY.price.h : effElemH('price').toFixed(1)}
+                           min={0}
+                           max={Math.max(0, effLabelHeight - 1)}
+                           value={layoutXY.price.y ?? '16'}
                            onChange={e => {
                              const v = e.target.value;
-                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, h: v } }));
-                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, h: v } } }));
+                             setLayoutXY(prev => ({ ...prev, price: { ...prev.price, y: v } }));
+                             updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, y: v } } }));
                            }}
                            className={numInputClass}
                          />
-                       </div>
-                       <div className="col-span-2 sm:col-span-1">
-                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Font Size</label>
-                         <div className="flex gap-1">
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, price: 1 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 1 } }));
-                             }}
-                             className={miniSegBtn((fontSize.price ?? 2) === 1)}
-                           >
-                             Normal
-                           </button>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFontSize(prev => ({ ...prev, price: 2 }));
-                               updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: 2 } }));
-                             }}
-                             className={miniSegBtn((fontSize.price ?? 2) === 2)}
-                           >
-                             Large
-                           </button>
-                         </div>
                        </div>
                      </div>
-
-                     {showPositionControls && (
-                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">X Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelWidth - 1)}
-                             value={layoutXY.price.x ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, price: { ...prev.price, x: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, x: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Y Pos (mm)</label>
-                           <input
-                             type="number"
-                             step={0.5}
-                             min={0}
-                             max={Math.max(0, effLabelHeight - 1)}
-                             value={layoutXY.price.y ?? ''}
-                             onChange={e => {
-                               const v = e.target.value;
-                               setLayoutXY(prev => ({ ...prev, price: { ...prev.price, y: v } }));
-                               updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, y: v } } }));
-                             }}
-                             className={numInputClass}
-                           />
-                         </div>
-                       </div>
-                     )}
-                   </div>
-
-                   {/* Advanced X/Y Position Toggle */}
-                   <div className="pt-0.5 flex justify-center">
-                     <button
-                       type="button"
-                       onClick={() => setShowPositionControls(prev => !prev)}
-                       className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-black transition-colors cursor-pointer py-1 px-2.5 rounded-lg hover:bg-slate-100"
-                     >
-                       {showPositionControls ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                       <span>{showPositionControls ? 'Hide Position Offsets (X, Y)' : 'Adjust Position Offsets (X, Y)'}</span>
-                     </button>
                    </div>
                  </div>
                </div>

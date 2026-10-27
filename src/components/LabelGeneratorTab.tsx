@@ -11,8 +11,8 @@ import { Product, LabelConfig } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
-import { buildTsplLabel, testPrintTspl, feedTspl } from '../lib/tspl';
-import { ensureLabelFont } from '../lib/labelRaster';
+import { buildTsplLabel, testPrintTspl, feedTspl, fontSizeToPt, ptToDots } from '../lib/tspl';
+import { ensureLabelFont, measureTextDimensionsMm } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
 import { isSupabaseConfigured } from '../lib/supabase';
 
@@ -82,24 +82,105 @@ const MmInput: React.FC<{
   </div>
 );
 
-const FieldEditorCard: React.FC<{
+const FontSizeControl: React.FC<{
+  label?: string;
+  value: number;
+  onChange: (val: number) => void;
+  min?: number;
+  max?: number;
+  estimatedSize?: string;
+}> = ({ label = 'Font Size', value, onChange, min = 6, max = 36, estimatedSize }) => {
+  const currentPt = fontSizeToPt(value);
+  const presets = [8, 10, 11, 12, 14, 16, 18, 20];
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+          {label}
+        </label>
+        {estimatedSize && (
+          <span className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+            Auto: {estimatedSize}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(min, currentPt - 1))}
+          disabled={currentPt <= min}
+          className="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm cursor-pointer disabled:opacity-30 transition-colors shrink-0"
+          title="Decrease font size"
+        >
+          <Minus className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="flex-1 relative">
+          <input
+            type="number"
+            min={min}
+            max={max}
+            step={1}
+            value={currentPt}
+            onChange={e => {
+              const n = parseInt(e.target.value, 10);
+              if (isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+            }}
+            className="w-full text-center py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-gray-900"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+            pt
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(max, currentPt + 1))}
+          disabled={currentPt >= max}
+          className="w-8 h-8 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm cursor-pointer disabled:opacity-30 transition-colors shrink-0"
+          title="Increase font size"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto scrollbar-none pt-0.5">
+        {presets.map(pt => (
+          <button
+            key={pt}
+            type="button"
+            onClick={() => onChange(pt)}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer shrink-0 font-mono ${
+              currentPt === pt
+                ? 'bg-black text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {pt}pt
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const TextFieldEditorCard: React.FC<{
   title: string;
   icon: React.ElementType;
   enabled: boolean;
   onToggleEnabled?: (enabled: boolean) => void;
   subtitle?: string;
-  width: string | number;
-  onWidthChange: (val: string) => void;
-  maxWidth: number;
-  height: string | number;
-  onHeightChange: (val: string) => void;
-  maxHeight: number;
-  fontSize?: number;
-  onFontSizeChange?: (size: number) => void;
+  fontSize: number;
+  onFontSizeChange: (size: number) => void;
+  estimatedSize?: string;
   posX: string | number;
   onPosXChange: (val: string) => void;
   posY: string | number;
   onPosYChange: (val: string) => void;
+  maxLabelWidth: number;
+  maxLabelHeight: number;
   extraContent?: React.ReactNode;
 }> = ({
   title,
@@ -107,18 +188,15 @@ const FieldEditorCard: React.FC<{
   enabled,
   onToggleEnabled,
   subtitle,
-  width,
-  onWidthChange,
-  maxWidth,
-  height,
-  onHeightChange,
-  maxHeight,
   fontSize,
   onFontSizeChange,
+  estimatedSize,
   posX,
   onPosXChange,
   posY,
   onPosYChange,
+  maxLabelWidth,
+  maxLabelHeight,
   extraContent,
 }) => {
   const [isOpen, setIsOpen] = useState(true);
@@ -139,8 +217,16 @@ const FieldEditorCard: React.FC<{
               <span className="font-extrabold text-xs text-slate-900 truncate">{title}</span>
               {subtitle && <span className="text-[10px] text-slate-400 font-medium truncate hidden sm:inline">· {subtitle}</span>}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-              {width}×{height}mm · X:{posX}, Y:{posY}
+            <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5">
+              <span>{fontSizeToPt(fontSize)}pt</span>
+              <span>·</span>
+              <span>X:{posX}, Y:{posY}mm</span>
+              {estimatedSize && (
+                <>
+                  <span>·</span>
+                  <span className="text-slate-700 font-semibold">{estimatedSize}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="text-slate-400 p-1 hover:text-slate-700">
@@ -156,48 +242,105 @@ const FieldEditorCard: React.FC<{
       </div>
 
       {isOpen && (
-        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-2.5">
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-3">
           {extraContent}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
-            <MmInput label="Width" value={width} onChange={onWidthChange} min={1} max={maxWidth} />
-            <MmInput label="Height" value={height} onChange={onHeightChange} min={1} max={maxHeight} />
-            {fontSize !== undefined && onFontSizeChange && (
-              <div className="col-span-2 sm:col-span-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                  Font Size
-                </label>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onFontSizeChange(1)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs transition-all text-center cursor-pointer ${
-                      fontSize === 1
-                        ? 'bg-black text-white border-black shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    Normal (1x)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onFontSizeChange(2)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs transition-all text-center cursor-pointer ${
-                      fontSize === 2
-                        ? 'bg-black text-white border-black shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    Large (2x)
-                  </button>
-                </div>
-              </div>
-            )}
+          <FontSizeControl
+            value={fontSize}
+            onChange={onFontSizeChange}
+            estimatedSize={estimatedSize}
+          />
+
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+            <MmInput label="X Position" value={posX} onChange={onPosXChange} min={0} max={maxLabelWidth} />
+            <MmInput label="Y Position" value={posY} onChange={onPosYChange} min={0} max={maxLabelHeight} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BarcodeEditorCard: React.FC<{
+  title: string;
+  icon: React.ElementType;
+  subtitle?: string;
+  width: string | number;
+  onWidthChange: (val: string) => void;
+  maxWidth: number;
+  height: string | number;
+  onHeightChange: (val: string) => void;
+  maxHeight: number;
+  posX: string | number;
+  onPosXChange: (val: string) => void;
+  posY: string | number;
+  onPosYChange: (val: string) => void;
+  showCodeText: boolean;
+  onToggleCodeText: (val: boolean) => void;
+}> = ({
+  title,
+  icon: Icon,
+  subtitle,
+  width,
+  onWidthChange,
+  maxWidth,
+  height,
+  onHeightChange,
+  maxHeight,
+  posX,
+  onPosXChange,
+  posY,
+  onPosYChange,
+  showCodeText,
+  onToggleCodeText,
+}) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <div className="rounded-xl border bg-white border-slate-200/90 shadow-2xs">
+      <div className="p-3 flex items-center justify-between gap-2.5">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+        >
+          <div className="p-1.5 rounded-lg shrink-0 bg-black text-white">
+            <Icon className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-xs text-slate-900 truncate">{title}</span>
+              {subtitle && <span className="text-[10px] text-slate-400 font-medium truncate hidden sm:inline">· {subtitle}</span>}
+            </div>
+            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+              {width}×{height}mm · X:{posX}, Y:{posY}
+            </div>
+          </div>
+          <div className="text-slate-400 p-1 hover:text-slate-700">
+            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
+
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-black text-white font-mono shrink-0">
+          CODE 128
+        </span>
+      </div>
+
+      {isOpen && (
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <MmInput label="Barcode Width" value={width} onChange={onWidthChange} min={10} max={maxWidth} />
+            <MmInput label="Barcode Height" value={height} onChange={onHeightChange} min={4} max={maxHeight} />
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
             <MmInput label="X Position" value={posX} onChange={onPosXChange} min={0} max={maxWidth} />
             <MmInput label="Y Position" value={posY} onChange={onPosYChange} min={0} max={maxHeight} />
+          </div>
+
+          <div className="flex items-center justify-between text-xs py-1 border-t border-slate-100">
+            <span className="font-semibold text-slate-700">Display Code Text (HRI)</span>
+            <ToggleSwitch checked={showCodeText} onChange={onToggleCodeText} />
           </div>
         </div>
       )}
@@ -463,11 +606,32 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
     created_at: new Date().toISOString(),
   };
 
+  const effDpiDots = (config.dpi ?? 203) === 300 ? 12 : 8;
+
+  const storeDims = useMemo(() => {
+    const pt = fontSizeToPt(config.fontSize.store, 12);
+    const px = ptToDots(pt, effDpiDots);
+    return measureTextDimensionsMm(config.storeName || businessName || 'Mibayate', px, effLabelWidth, effDpiDots, true, 1);
+  }, [config.storeName, businessName, config.fontSize.store, effLabelWidth, effDpiDots]);
+
+  const productDims = useMemo(() => {
+    const pt = fontSizeToPt(config.fontSize.product, 10);
+    const px = ptToDots(pt, effDpiDots);
+    return measureTextDimensionsMm(sampleProduct.name, px, effLabelWidth, effDpiDots, true, 2);
+  }, [sampleProduct.name, config.fontSize.product, effLabelWidth, effDpiDots]);
+
+  const priceDims = useMemo(() => {
+    const pt = fontSizeToPt(config.fontSize.price, 13);
+    const px = ptToDots(pt, effDpiDots);
+    const priceText = `${sampleProduct.price.toLocaleString()} ${currencySymbol}`;
+    return measureTextDimensionsMm(priceText, px, effLabelWidth, effDpiDots, true, 1);
+  }, [sampleProduct.price, currencySymbol, config.fontSize.price, effLabelWidth, effDpiDots]);
+
   const layoutForPrint = {
-    storeName: config.showStoreName ? { xMm: effElemX('store'), yMm: effElemY('store'), widthMm: effElemW('store'), heightMm: effElemH('store'), size: config.fontSize.store as 1 | 2 } : undefined,
-    productName: config.showProductName ? { xMm: effElemX('product'), yMm: effElemY('product'), widthMm: effElemW('product'), heightMm: effElemH('product'), size: config.fontSize.product as 1 | 2 } : undefined,
+    storeName: config.showStoreName ? { xMm: effElemX('store'), yMm: effElemY('store'), size: config.fontSize.store } : undefined,
+    productName: config.showProductName ? { xMm: effElemX('product'), yMm: effElemY('product'), size: config.fontSize.product } : undefined,
     barcode: { xMm: effBarcodeX, yMm: effBarcodeY, widthMm: effBarcodeWidth, heightMm: effBarcodeHeight },
-    price: config.showPrice ? { xMm: effElemX('price'), yMm: effElemY('price'), widthMm: effElemW('price'), heightMm: effElemH('price'), size: config.fontSize.price as 1 | 2 } : undefined,
+    price: config.showPrice ? { xMm: effElemX('price'), yMm: effElemY('price'), size: config.fontSize.price } : undefined,
   };
 
   const labelOptionsFor = (productItem: Product) => ({
@@ -1212,10 +1376,10 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
               <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-sm">
-                    Element Sizing & Field Positions
+                    Element Typography & Positions
                   </h3>
                   <p className="text-[10px] text-slate-500 font-medium">
-                    Adjust dimensions, font scale, and coordinates in millimeters
+                    Change font size freely; text width and height scale dynamically
                   </p>
                 </div>
                 <button
@@ -1230,52 +1394,45 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
               </div>
 
               {/* 1. Store Name Header */}
-              <FieldEditorCard
+              <TextFieldEditorCard
                 title="Store Name (Header)"
                 icon={Store}
                 enabled={config.showStoreName}
                 onToggleEnabled={val => updateConfig(p => ({ ...p, showStoreName: val }))}
                 subtitle={config.storeName || 'Mibayate'}
-                width={config.layoutXY.store.w !== undefined ? config.layoutXY.store.w : effElemW('store').toFixed(1)}
-                onWidthChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, w: val } } }))}
-                maxWidth={effLabelWidth}
-                height={config.layoutXY.store.h !== undefined ? config.layoutXY.store.h : effElemH('store').toFixed(1)}
-                onHeightChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, h: val } } }))}
-                maxHeight={effLabelHeight}
-                fontSize={config.fontSize.store ?? 2}
+                fontSize={config.fontSize.store ?? 12}
                 onFontSizeChange={val => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, store: val } }))}
+                estimatedSize={`~${storeDims.widthMm} × ${storeDims.heightMm} mm`}
                 posX={config.layoutXY.store.x ?? '0'}
                 onPosXChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, x: val } } }))}
                 posY={config.layoutXY.store.y ?? '1'}
                 onPosYChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, store: { ...p.layoutXY.store, y: val } } }))}
+                maxLabelWidth={effLabelWidth}
+                maxLabelHeight={effLabelHeight}
               />
 
               {/* 2. Product Title */}
-              <FieldEditorCard
+              <TextFieldEditorCard
                 title="Product Title"
                 icon={Tag}
                 enabled={config.showProductName}
                 onToggleEnabled={val => updateConfig(p => ({ ...p, showProductName: val }))}
                 subtitle="Name & description"
-                width={config.layoutXY.product.w !== undefined ? config.layoutXY.product.w : effElemW('product').toFixed(1)}
-                onWidthChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, w: val } } }))}
-                maxWidth={effLabelWidth}
-                height={config.layoutXY.product.h !== undefined ? config.layoutXY.product.h : effElemH('product').toFixed(1)}
-                onHeightChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, h: val } } }))}
-                maxHeight={effLabelHeight}
-                fontSize={config.fontSize.product ?? 2}
+                fontSize={config.fontSize.product ?? 10}
                 onFontSizeChange={val => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, product: val } }))}
+                estimatedSize={`~${productDims.widthMm} × ${productDims.heightMm} mm`}
                 posX={config.layoutXY.product.x ?? '0'}
                 onPosXChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, x: val } } }))}
-                posY={config.layoutXY.product.y ?? '3'}
+                posY={config.layoutXY.product.y ?? '3.5'}
                 onPosYChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, product: { ...p.layoutXY.product, y: val } } }))}
+                maxLabelWidth={effLabelWidth}
+                maxLabelHeight={effLabelHeight}
               />
 
               {/* 3. Barcode Box */}
-              <FieldEditorCard
+              <BarcodeEditorCard
                 title="Barcode Box"
                 icon={Type}
-                enabled={true}
                 subtitle="CODE 128"
                 width={config.barcodeWidth !== undefined ? config.barcodeWidth : effBarcodeWidth.toFixed(1)}
                 onWidthChange={val => updateConfig(p => ({ ...p, barcodeWidth: val, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, w: val } } }))}
@@ -1285,35 +1442,28 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 maxHeight={effLabelHeight}
                 posX={config.layoutXY.barcode.x ?? '0'}
                 onPosXChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, x: val } } }))}
-                posY={config.layoutXY.barcode.y ?? '6'}
+                posY={config.layoutXY.barcode.y ?? '8'}
                 onPosYChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, y: val } } }))}
-                extraContent={
-                  <div className="flex items-center justify-between text-xs py-1">
-                    <span className="font-semibold text-slate-700">Display Code Text (HRI)</span>
-                    <ToggleSwitch checked={config.showCodeText} onChange={val => updateConfig(p => ({ ...p, showCodeText: val }))} />
-                  </div>
-                }
+                showCodeText={config.showCodeText}
+                onToggleCodeText={val => updateConfig(p => ({ ...p, showCodeText: val }))}
               />
 
               {/* 4. Selling Price */}
-              <FieldEditorCard
+              <TextFieldEditorCard
                 title="Selling Price"
                 icon={DollarSign}
                 enabled={config.showPrice}
                 onToggleEnabled={val => updateConfig(p => ({ ...p, showPrice: val }))}
                 subtitle="Price tag"
-                width={config.layoutXY.price.w !== undefined ? config.layoutXY.price.w : effElemW('price').toFixed(1)}
-                onWidthChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, w: val } } }))}
-                maxWidth={effLabelWidth}
-                height={config.layoutXY.price.h !== undefined ? config.layoutXY.price.h : effElemH('price').toFixed(1)}
-                onHeightChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, h: val } } }))}
-                maxHeight={effLabelHeight}
-                fontSize={config.fontSize.price ?? 2}
+                fontSize={config.fontSize.price ?? 13}
                 onFontSizeChange={val => updateConfig(p => ({ ...p, fontSize: { ...p.fontSize, price: val } }))}
+                estimatedSize={`~${priceDims.widthMm} × ${priceDims.heightMm} mm`}
                 posX={config.layoutXY.price.x ?? '0'}
                 onPosXChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, x: val } } }))}
                 posY={config.layoutXY.price.y ?? '16'}
                 onPosYChange={val => updateConfig(p => ({ ...p, layoutXY: { ...p.layoutXY, price: { ...p.layoutXY.price, y: val } } }))}
+                maxLabelWidth={effLabelWidth}
+                maxLabelHeight={effLabelHeight}
               />
             </div>
           )}

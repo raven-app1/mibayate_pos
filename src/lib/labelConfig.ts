@@ -20,15 +20,15 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   storeName: 'Mibayate',
   customLayout: true,
   layoutXY: {
-    store: { x: '0', y: '1', w: '40', h: '2' },
-    product: { x: '0', y: '3', w: '40', h: '2' },
-    barcode: { x: '0', y: '6', w: '40', h: '10' },
-    price: { x: '0', y: '16', w: '40', h: '3' },
+    store: { x: '0', y: '1' },
+    product: { x: '0', y: '3.5' },
+    barcode: { x: '0', y: '8', w: '40', h: '10' },
+    price: { x: '0', y: '16' },
   },
   fontSize: {
-    store: 2,
-    product: 2,
-    price: 2,
+    store: 12,
+    product: 10,
+    price: 13,
   },
   dpi: 203,
 };

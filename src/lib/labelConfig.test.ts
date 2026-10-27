@@ -19,17 +19,18 @@ describe('labelConfig defaults and persistence', () => {
 
     expect(DEFAULT_LABEL_CONFIG.storeName).toBe('Mibayate');
     expect(DEFAULT_LABEL_CONFIG.showStoreName).toBe(true);
-    expect(DEFAULT_LABEL_CONFIG.layoutXY.store).toEqual({ x: '0', y: '1', w: '40', h: '2' });
-    expect(DEFAULT_LABEL_CONFIG.fontSize.store).toBe(2);
+    expect(DEFAULT_LABEL_CONFIG.layoutXY.store.x).toBe('0');
+    expect(DEFAULT_LABEL_CONFIG.layoutXY.store.y).toBe('1');
+    expect(DEFAULT_LABEL_CONFIG.fontSize.store).toBe(12);
 
     expect(DEFAULT_LABEL_CONFIG.showProductName).toBe(true);
-    expect(DEFAULT_LABEL_CONFIG.layoutXY.product).toEqual({ x: '0', y: '3', w: '40', h: '2' });
-    expect(DEFAULT_LABEL_CONFIG.fontSize.product).toBe(2);
+    expect(DEFAULT_LABEL_CONFIG.layoutXY.product.x).toBe('0');
+    expect(DEFAULT_LABEL_CONFIG.fontSize.product).toBe(10);
 
     expect(DEFAULT_LABEL_CONFIG.barcodeType).toBe('CODE128');
     expect(DEFAULT_LABEL_CONFIG.barcodeWidth).toBe('40');
     expect(DEFAULT_LABEL_CONFIG.barcodeHeight).toBe('10');
-    expect(DEFAULT_LABEL_CONFIG.layoutXY.barcode).toEqual({ x: '0', y: '6', w: '40', h: '10' });
+    expect(DEFAULT_LABEL_CONFIG.layoutXY.barcode).toEqual({ x: '0', y: '8', w: '40', h: '10' });
   });
 
   it('saves defaults to localStorage when no saved config exists', () => {

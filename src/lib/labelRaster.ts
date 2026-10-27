@@ -314,6 +314,51 @@ export function measureTextBlockHeight(run: RasterTextRun): number {
   return layout.lines.length * layout.lineHeight;
 }
 
+export function measureTextLayout(
+  text: string,
+  px: number,
+  maxWidthDots: number,
+  bold = true,
+  maxLines = 1,
+): { widthDots: number; heightDots: number; lines: string[] } {
+  const ctx = measuringContext();
+  if (!ctx) {
+    const approxCharWidth = px * 0.6;
+    const widthDots = Math.min(maxWidthDots, Math.max(10, Math.round((text || '').length * approxCharWidth)));
+    const heightDots = Math.round(maxLines === 1 ? px + 2 : px * LINE_RATIO);
+    return { widthDots, heightDots, lines: [text] };
+  }
+  const layout = layoutText(ctx, {
+    text,
+    xDots: 0,
+    yDots: 0,
+    widthDots: maxWidthDots,
+    px,
+    bold,
+    maxLines,
+  });
+  const lineWidths = layout.lines.map(line => ctx.measureText(line).width);
+  const widthDots = Math.max(1, Math.ceil(Math.max(...lineWidths, 0)));
+  const heightDots = Math.max(1, layout.lines.length * layout.lineHeight);
+  return { widthDots, heightDots, lines: layout.lines };
+}
+
+export function measureTextDimensionsMm(
+  text: string,
+  px: number,
+  maxWidthMm: number,
+  dotsPerMm = 8,
+  bold = true,
+  maxLines = 1,
+): { widthMm: number; heightMm: number } {
+  const maxWidthDots = Math.max(Math.round(maxWidthMm * dotsPerMm), 20);
+  const measured = measureTextLayout(text, px, maxWidthDots, bold, maxLines);
+  return {
+    widthMm: Math.round((measured.widthDots / dotsPerMm) * 10) / 10,
+    heightMm: Math.round((measured.heightDots / dotsPerMm) * 10) / 10,
+  };
+}
+
 export function renderTextBlock(run: RasterTextRun): RasterTextBlock | null {
   if (!canRasterizeText()) return null;
   const measure = measuringContext();
