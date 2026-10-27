@@ -5,13 +5,14 @@ import {
   Minus, Plus, Ruler, Scissors, Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw,
   SlidersHorizontal, Store, Type, DollarSign, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { Product, LabelConfig } from '../types';
+import { Product, LabelConfig, LabelTemplate } from '../types';
 import LabelRasterPreview from './LabelRasterPreview';
 import * as printerBridge from '../lib/printerBridge';
 import { getPrintableMm } from '../lib/escpos';
 import { buildTsplLabel, testPrintTspl, feedTspl, fontSizeToPt } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, saveLabelConfig, DEFAULT_LABEL_CONFIG, computeLabelOffsetMm } from '../lib/labelConfig';
+import { dbService } from '../lib/supabase';
 
 interface BarcodePrintModalProps {
   products: Product[];
@@ -81,9 +82,12 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
   const [fontSize, setFontSize] = useState<{ store: number; product: number; price: number }>(initialConfig.fontSize);
   const [showPositionControls, setShowPositionControls] = useState(false);
+  const [templates, setTemplates] = useState<LabelTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
+      dbService.labelTemplates.getAll().then(setTemplates).catch(() => {});
       const cfg = loadLabelConfig(businessName);
       setStoreName(cfg.storeName);
       setShowStoreName(cfg.showStoreName);
@@ -820,9 +824,34 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
              {/* LABEL DESIGN */}
              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
-               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                 <Settings2 className="w-4 h-4 text-gray-900" />
-                 <span>Label Design & Format</span>
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                   <Settings2 className="w-4 h-4 text-gray-900" />
+                   <span>Label Design & Format</span>
+                 </div>
+
+                 {templates.length > 0 && (
+                   <select
+                     value={selectedTemplateId}
+                     onChange={e => {
+                       const tmpl = templates.find(t => t.id === e.target.value);
+                       if (tmpl) {
+                         setSelectedTemplateId(tmpl.id);
+                         updateConfig(() => tmpl.config);
+                       } else {
+                         setSelectedTemplateId('');
+                       }
+                     }}
+                     className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-800 focus:outline-none focus:border-gray-900 max-w-[160px] cursor-pointer"
+                   >
+                     <option value="">Template Preset...</option>
+                     {templates.map(t => (
+                       <option key={t.id} value={t.id}>
+                         {t.name}
+                       </option>
+                     ))}
+                   </select>
+                 )}
                </div>
 
                <div>

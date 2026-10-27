@@ -577,6 +577,30 @@ CREATE POLICY "Authorized users can manage sale_delete_requests"
     AND public.current_user_can_access_branch(branch_id)
   );
 
+-- ── 10. Label Designer Templates ────────────────────────────
+CREATE TABLE public.label_templates (
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    description    TEXT DEFAULT '',
+    is_default     BOOLEAN DEFAULT false,
+    config         JSONB NOT NULL,
+    created_at     TIMESTAMPTZ DEFAULT timezone('Asia/Yangon', now()),
+    updated_at     TIMESTAMPTZ DEFAULT timezone('Asia/Yangon', now())
+);
+
+ALTER TABLE public.label_templates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read label_templates"
+  ON public.label_templates FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can manage label_templates"
+  ON public.label_templates FOR ALL
+  USING (auth.role() = 'authenticated');
+
+CREATE INDEX IF NOT EXISTS idx_label_templates_is_default ON public.label_templates(is_default);
+CREATE INDEX IF NOT EXISTS idx_label_templates_created_at ON public.label_templates(created_at);
+
 CREATE OR REPLACE FUNCTION public.delete_user_account(target_user_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN

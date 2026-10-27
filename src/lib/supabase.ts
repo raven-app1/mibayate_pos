@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Branch, Product, ProductStock, Sale, SaleItem, SaleWithItems, UserProfile, InventoryTransaction, UserRole, BusinessProfile, CashFlowEntry, SaleDeleteRequest } from '../types';
+import { Branch, Product, ProductStock, Sale, SaleItem, SaleWithItems, UserProfile, InventoryTransaction, UserRole, BusinessProfile, CashFlowEntry, SaleDeleteRequest, LabelTemplate, LabelConfig } from '../types';
 import { notifyDataChanged } from './realtimeSync';
 
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
@@ -184,6 +184,7 @@ const generateUniqueSku = async (taken: Set<string>, excludeId?: string): Promis
 
 const CURRENT_USER_KEY = 'retail_shop_current_user';
 const MOCK_BUSINESS_KEY = 'retail_shop_business_profile';
+const LABEL_TEMPLATES_KEY = 'retail_shop_label_templates';
 
 export const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
   name: 'RetailHub',
@@ -1500,6 +1501,165 @@ export const dbService = {
         .update({ status: 'rejected', reviewed_at: now, reviewed_by: reviewedBy, rejection_reason: rejectionReason || '' })
         .eq('id', requestId);
       notifyDataChanged('sale_delete_requests');
+    }
+  },
+
+  labelTemplates: {
+    async getAll(): Promise<LabelTemplate[]> {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('label_templates')
+            .select('*')
+            .order('is_default', { ascending: false })
+            .order('created_at', { ascending: true });
+          if (!error && data && data.length > 0) {
+            localStorage.setItem(LABEL_TEMPLATES_KEY, JSON.stringify(data));
+            return data;
+          }
+        } catch (err) {
+          console.warn('labelTemplates.getAll Supabase fetch failed, using local cache:', err);
+        }
+      }
+      const raw = localStorage.getItem(LABEL_TEMPLATES_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+      const initial = [
+        {
+          id: 'default_40x20',
+          name: 'Standard Product Sticker (40 × 20 mm)',
+          description: '40×20mm label on 72mm roll at 203 DPI with Store Name and Product Title',
+          is_default: true,
+          config: {
+            paperMode: 'sticker' as const,
+            paperWidth: '72',
+            labelWidth: '40',
+            labelHeight: '20',
+            barcodeWidth: '40',
+            barcodeHeight: '10',
+            barcodeType: 'CODE128' as const,
+            cutMode: 'off' as const,
+            labelGap: '1',
+            feedOffset: '0',
+            labelAlign: 'left' as const,
+            labelOffsetX: '0',
+            showStoreName: true,
+            showProductName: true,
+            showPrice: false,
+            showCodeText: true,
+            storeName: 'Mibayate',
+            customLayout: true,
+            layoutXY: {
+              store: { x: '0', y: '1' },
+              product: { x: '0', y: '3.5' },
+              barcode: { x: '0', y: '8', w: '40', h: '10' },
+              price: { x: '0', y: '16' },
+            },
+            fontSize: {
+              store: 12,
+              product: 10,
+              price: 13,
+            },
+            dpi: 203 as const,
+          },
+          created_at: new Date().toISOString(),
+        }
+      ];
+      localStorage.setItem(LABEL_TEMPLATES_KEY, JSON.stringify(initial));
+      return initial;
+    },
+
+    async save(name: string, config: LabelConfig, options: { id?: string; description?: string; is_default?: boolean } = {}): Promise<LabelTemplate> {
+      const now = new Date().toISOString();
+      const id = options.id || `tmpl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const template: LabelTemplate = {
+        id,
+        name: name.trim() || 'Custom Label Template',
+        description: options.description || '',
+        is_default: !!options.is_default,
+        config,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const templates = await this.getAll();
+      const existingIdx = templates.findIndex(t => t.id === id);
+      let updatedList: LabelTemplate[];
+
+      if (template.is_default) {
+        templates.forEach(t => { t.is_default = false; });
+      }
+
+      if (existingIdx >= 0) {
+        template.created_at = templates[existingIdx].created_at;
+        templates[existingIdx] = template;
+        updatedList = [...templates];
+      } else {
+        updatedList = [...templates, template];
+      }
+
+      localStorage.setItem(LABEL_TEMPLATES_KEY, JSON.stringify(updatedList));
+
+      if (supabase) {
+        try {
+          if (template.is_default) {
+            await supabase.from('label_templates').update({ is_default: false }).neq('id', id);
+          }
+          await supabase.from('label_templates').upsert({
+            id: template.id,
+            name: template.name,
+            description: template.description,
+            is_default: template.is_default,
+            config: template.config,
+            created_at: template.created_at,
+            updated_at: template.updated_at,
+          });
+        } catch (err) {
+          console.warn('labelTemplates.save Supabase write failed (saved to local cache):', err);
+        }
+      }
+
+      notifyDataChanged('label_templates');
+      return template;
+    },
+
+    async delete(id: string): Promise<void> {
+      const templates = await this.getAll();
+      const updatedList = templates.filter(t => t.id !== id);
+      localStorage.setItem(LABEL_TEMPLATES_KEY, JSON.stringify(updatedList));
+
+      if (supabase) {
+        try {
+          await supabase.from('label_templates').delete().eq('id', id);
+        } catch (err) {
+          console.warn('labelTemplates.delete Supabase delete failed:', err);
+        }
+      }
+
+      notifyDataChanged('label_templates');
+    },
+
+    async setDefault(id: string): Promise<void> {
+      const templates = await this.getAll();
+      templates.forEach(t => {
+        t.is_default = t.id === id;
+      });
+      localStorage.setItem(LABEL_TEMPLATES_KEY, JSON.stringify(templates));
+
+      if (supabase) {
+        try {
+          await supabase.from('label_templates').update({ is_default: false }).neq('id', id);
+          await supabase.from('label_templates').update({ is_default: true }).eq('id', id);
+        } catch (err) {
+          console.warn('labelTemplates.setDefault Supabase update failed:', err);
+        }
+      }
+
+      notifyDataChanged('label_templates');
     }
   },
 

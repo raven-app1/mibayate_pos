@@ -203,3 +203,13 @@ export interface LabelConfig {
   lastPrinterAddress?: string;
   lastPrinterName?: string;
 }
+
+export interface LabelTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  is_default?: boolean;
+  config: LabelConfig;
+  created_at: string;
+  updated_at?: string;
+}
