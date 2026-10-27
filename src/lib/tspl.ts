@@ -579,7 +579,7 @@ export function testPrintTspl(
   labelWidthMm = 40,
   labelHeightMm = 20,
   labelGapMm = 1,
-  labelOffsetMm = 32,
+  labelOffsetMm = 0,
 ): Uint8Array {
   const widthMm = Math.max(5, labelWidthMm);
   const heightMm = Math.max(5, labelHeightMm);

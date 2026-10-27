@@ -14,7 +14,7 @@ describe('labelConfig defaults and persistence', () => {
     expect(DEFAULT_LABEL_CONFIG.labelHeight).toBe('20');
     expect(DEFAULT_LABEL_CONFIG.labelGap).toBe('1');
     expect(DEFAULT_LABEL_CONFIG.feedOffset).toBe('0');
-    expect(DEFAULT_LABEL_CONFIG.labelAlign).toBe('right');
+    expect(DEFAULT_LABEL_CONFIG.labelAlign).toBe('left');
     expect(DEFAULT_LABEL_CONFIG.labelOffsetX).toBe('0');
 
     expect(DEFAULT_LABEL_CONFIG.storeName).toBe('Mibayate');
@@ -51,13 +51,12 @@ describe('labelConfig defaults and persistence', () => {
     expect(reloaded.labelHeight).toBe('25');
   });
 
-  it('computes 32mm right-aligned offset for 40mm label on 72mm paper', () => {
+  it('computes 0mm left-aligned offset by default', () => {
     const offset = computeLabelOffsetMm({
       paperWidth: '72',
       labelWidth: '40',
-      labelAlign: 'right',
       labelOffsetX: '0',
     });
-    expect(offset).toBe(32);
+    expect(offset).toBe(0);
   });
 });

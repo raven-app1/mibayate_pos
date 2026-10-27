@@ -11,7 +11,7 @@ export const DEFAULT_LABEL_CONFIG: LabelConfig = {
   cutMode: 'off',
   labelGap: '1',
   feedOffset: '0',
-  labelAlign: 'right',
+  labelAlign: 'left',
   labelOffsetX: '0',
   showStoreName: true,
   showProductName: true,
@@ -44,7 +44,7 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
         ...DEFAULT_LABEL_CONFIG,
         ...parsed,
         dpi: parsed.dpi === 300 ? 300 : 203,
-        labelAlign: parsed.labelAlign === 'left' || parsed.labelAlign === 'center' ? parsed.labelAlign : 'right',
+        labelAlign: 'left',
         labelOffsetX: typeof parsed.labelOffsetX === 'string' ? parsed.labelOffsetX : '0',
         storeName: (parsed.storeName && parsed.storeName !== 'My Retail Store') ? parsed.storeName : (defaultStoreName || DEFAULT_LABEL_CONFIG.storeName),
         layoutXY: {
@@ -67,18 +67,14 @@ export function loadLabelConfig(defaultStoreName?: string): LabelConfig {
 }
 
 export function computeLabelOffsetMm(config: {
-  paperWidth: string;
-  labelWidth: string;
+  paperWidth?: string;
+  labelWidth?: string;
   labelAlign?: 'left' | 'center' | 'right';
   labelOffsetX?: string;
 }): number {
-  const paperMm = parseFloat(config.paperWidth) || 72;
-  const labelMm = Math.min(parseFloat(config.labelWidth) || paperMm, paperMm);
-  const align = config.labelAlign ?? 'right';
-  const base = align === 'left' ? 0 : align === 'center' ? (paperMm - labelMm) / 2 : paperMm - labelMm;
   const parsedNudge = parseFloat(config.labelOffsetX ?? '0');
   const nudge = isFinite(parsedNudge) ? Math.min(Math.max(parsedNudge, -20), 20) : 0;
-  return Math.max(0, Math.round((base + nudge) * 10) / 10);
+  return Math.max(0, Math.round(nudge * 10) / 10);
 }
 
 

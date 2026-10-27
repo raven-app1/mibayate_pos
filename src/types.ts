@@ -180,7 +180,7 @@ export interface LabelConfig {
   cutMode: 'off' | 'full' | 'partial';
   labelGap: string;
   feedOffset: string;
-  labelAlign: 'left' | 'center' | 'right';
+  labelAlign?: 'left' | 'center' | 'right';
   labelOffsetX: string;
   showStoreName: boolean;
   showProductName: boolean;

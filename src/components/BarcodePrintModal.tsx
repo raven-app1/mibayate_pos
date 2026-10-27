@@ -711,16 +711,8 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                )}
 
                <div>
-                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                   Label Position on Paper
-                 </label>
-                 <div className="flex gap-1.5 text-xs">
-                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'left' }))} className={segBtn(labelAlign === 'left')}>Left</button>
-                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'center' }))} className={segBtn(labelAlign === 'center')}>Center</button>
-                   <button onClick={() => updateConfig(p => ({ ...p, labelAlign: 'right' }))} className={segBtn(labelAlign === 'right')}>Right</button>
-                 </div>
                  <div className="flex items-center justify-between gap-2 mt-1.5">
-                   <span className="text-[10px] font-bold text-slate-600">Print starts {effLabelOffsetMm.toFixed(1)} mm from the left edge</span>
+                   <span className="text-[10px] font-bold text-slate-600">Alignment: Left ({effLabelOffsetMm.toFixed(1)} mm offset)</span>
                    <div className="flex items-center gap-1">
                      <span className="text-[10px] font-bold text-slate-500">Nudge</span>
                      <input type="number" min={-20} max={20} step={0.5} value={labelOffsetX}
@@ -728,9 +720,6 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                        className="w-16 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-gray-900" />
                    </div>
                  </div>
-                 <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                   Where the sticker sits inside the paper path. Use Right when the label roll is loaded against the right guide, then nudge until it lands on the sticker.
-                 </p>
                </div>
              </div>
 

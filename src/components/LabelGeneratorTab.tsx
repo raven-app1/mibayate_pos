@@ -972,7 +972,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
               </div>
               <div className="mt-2 flex items-center justify-between w-full text-[10px] font-mono text-slate-500">
                 <span>{effLabelWidth}×{effLabelHeight}mm · {config.dpi ?? 203} DPI</span>
-                <span>Roll: {effPaperWidth}mm ({config.labelAlign})</span>
+                <span>Roll: {effPaperWidth}mm (Left)</span>
               </div>
             </div>
 
@@ -1103,17 +1103,9 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </div>
                 )}
 
-                <div className="pt-1 space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                    Label Position on Paper Roll
-                  </label>
-                  <div className="flex gap-1.5 text-xs">
-                    <button type="button" onClick={() => updateConfig(p => ({ ...p, labelAlign: 'left' }))} className={segBtn(config.labelAlign === 'left')}>Left</button>
-                    <button type="button" onClick={() => updateConfig(p => ({ ...p, labelAlign: 'center' }))} className={segBtn(config.labelAlign === 'center')}>Center</button>
-                    <button type="button" onClick={() => updateConfig(p => ({ ...p, labelAlign: 'right' }))} className={segBtn(config.labelAlign === 'right')}>Right</button>
-                  </div>
+                <div className="pt-1">
                   <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] font-medium text-slate-600 flex items-center justify-between">
-                    <span>Print position: <strong>{effLabelOffsetMm.toFixed(1)} mm</strong> from left edge</span>
+                    <span>Alignment: <strong>Left</strong></span>
                     <span className="font-mono text-slate-400">({effLabelWidth} mm on {effPaperWidth} mm roll)</span>
                   </div>
                 </div>
