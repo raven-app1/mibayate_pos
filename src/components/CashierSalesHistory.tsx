@@ -430,57 +430,43 @@ export default function CashierSalesHistory({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto android-scroll px-3 sm:px-6 pt-3 pb-8 max-w-7xl mx-auto w-full space-y-4">
+    <div className="flex-1 overflow-y-auto android-scroll px-3 sm:px-6 pt-3 pb-24 sm:pb-8 max-w-7xl mx-auto w-full space-y-3 sm:space-y-4">
       {/* Top Header Card */}
-      <div className="android-card p-4 sm:p-5 border border-slate-200/80 bg-white">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
-              <History className="w-5 h-5" />
+      <div className="android-card p-3 sm:p-4 border border-slate-200/80 bg-white">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <History className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">Sales History</h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200">
-                  {sales.length} receipts
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Processed receipts by <span className="font-bold text-slate-700">{user.name}</span> • {user.branch_name || 'Main Branch'}
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight truncate">
+                Sales History
+              </h2>
+              <p className="text-[11px] text-slate-500 font-medium truncate">
+                <span className="font-semibold text-slate-700">{user.name}</span> • {user.branch_name || 'Main Branch'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setShowFilterDrawer(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                appliedFilterCount > 0
-                  ? 'bg-black text-white hover:bg-gray-800'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>{appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : 'Filters'}</span>
-            </button>
-
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={handleExportExcel}
               disabled={filteredSales.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
               title="Export filtered sales to Excel"
+              aria-label="Export to Excel"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Export</span> XLSX
+              <span className="hidden sm:inline">Export</span>
             </button>
 
             <button
               type="button"
               onClick={onRefresh}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-all cursor-pointer shadow-2xs"
               title="Reload receipts from database"
+              aria-label="Refresh receipts"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -490,25 +476,25 @@ export default function CashierSalesHistory({
       </div>
 
       {/* Controls Card: Search bar + Filter & Sort row */}
-      <div className="android-card p-3.5 sm:p-5 border border-slate-200/80 bg-white space-y-3 shadow-xs">
+      <div className="android-card p-3 sm:p-4 border border-slate-200/80 bg-white space-y-2.5 sm:space-y-3 shadow-xs">
         {/* Full-width Search Bar */}
-        <div className="relative w-full">
-          <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <div className="relative w-full min-w-0">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by receipt ID, customer name, phone, item."
+            placeholder="Search receipts, customers, phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-14 pl-12 pr-11 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-black transition-all shadow-2xs"
+            className="w-full h-11 sm:h-12 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-black transition-all shadow-2xs"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 rounded-xl cursor-pointer transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
               aria-label="Clear search"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -516,7 +502,7 @@ export default function CashierSalesHistory({
         {/* Row below search bar: Results count on left, Filters + Sort aligned right */}
         <div className="flex items-center justify-between gap-2 pt-0.5">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-xs font-bold text-slate-600 truncate">
+            <span className="text-xs font-bold text-slate-500 truncate">
               {filteredSales.length} {filteredSales.length === 1 ? 'receipt' : 'receipts'}
             </span>
 
@@ -545,12 +531,12 @@ export default function CashierSalesHistory({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Filters Button */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* The Main Single Filter Button */}
             <button
               type="button"
               onClick={() => setShowFilterDrawer(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
                 appliedFilterCount > 0
                   ? 'bg-black text-white border-black'
                   : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
@@ -565,7 +551,7 @@ export default function CashierSalesHistory({
               <button
                 type="button"
                 onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
                 aria-haspopup="listbox"
                 aria-expanded={showSortDropdown}
               >
@@ -798,21 +784,13 @@ export default function CashierSalesHistory({
                         </td>
 
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSale(sale)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                              title="View full receipt details"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-
+                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => onPrintReceipt(sale)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-black hover:bg-slate-100 transition-colors cursor-pointer"
                               title="Print thermal receipt"
+                              aria-label="Print receipt"
                             >
                               <Printer className="w-3.5 h-3.5" />
                             </button>
@@ -821,12 +799,22 @@ export default function CashierSalesHistory({
                               <button
                                 type="button"
                                 onClick={() => onRequestDelete(sale)}
-                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                                 title="Request delete / void"
+                                aria-label="Request delete"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSale(sale)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs active-scale"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View</span>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -838,7 +826,7 @@ export default function CashierSalesHistory({
           </div>
 
           {/* CARDS VIEW (Mobile & Alternative Desktop Grid) */}
-          <div className={`${viewMode === 'cards' ? 'grid' : 'grid sm:hidden'} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3`}>
+          <div className={`${viewMode === 'cards' ? 'grid' : 'grid sm:hidden'} grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3`}>
             {filteredSales.map((sale) => {
               const req = deleteRequestMap.get(sale.id);
               const isCopied = copiedId === sale.id;
@@ -847,129 +835,143 @@ export default function CashierSalesHistory({
                 <div
                   key={sale.id}
                   onClick={() => setSelectedSale(sale)}
-                  className="android-card p-4 border border-slate-200/80 bg-white flex flex-col justify-between hover:border-slate-400 transition-all cursor-pointer group shadow-2xs"
+                  className="android-card p-3 sm:p-3.5 border border-slate-200/90 bg-white hover:border-slate-400 transition-all cursor-pointer group shadow-2xs space-y-2.5"
                 >
-                  <div className="space-y-3">
-                    {/* Top Row: Receipt ID & Timestamp */}
-                    <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-black text-slate-900 text-xs">
-                            #{sale.id.slice(0, 8)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleCopyId(sale.id, e)}
-                            className="p-1 text-slate-400 hover:text-black rounded transition-colors cursor-pointer"
-                            title="Copy receipt ID"
-                          >
-                            {isCopied ? <Check className="w-3 h-3 text-black" /> : <Copy className="w-3 h-3" />}
-                          </button>
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          {formatTime(sale.created_at)} • {getRelativeTime(sale.created_at)}
+                  {/* Section 1, 2, 3: Header Row */}
+                  <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="min-w-0">
+                      {/* 1. Receipt ID & Copy */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-slate-900 text-xs tracking-tight">
+                          #{sale.id.slice(0, 8)}
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyId(sale.id, e)}
+                          className="p-1 text-slate-400 hover:text-black rounded transition-colors cursor-pointer"
+                          title="Copy full receipt ID"
+                          aria-label="Copy receipt ID"
+                        >
+                          {isCopied ? <Check className="w-3 h-3 text-black" /> : <Copy className="w-3 h-3" />}
+                        </button>
                       </div>
 
-                      <div className="text-right">
-                        <div className="font-mono font-black text-slate-950 text-base">
-                          {formatCurrency(sale.total_amount)}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          {sale.items?.length || 0} {sale.items?.length === 1 ? 'item' : 'items'}
-                        </span>
+                      {/* 3. Date & Time */}
+                      <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{formatTime(sale.created_at)}</span>
+                        <span>•</span>
+                        <span>{formatDate(sale.created_at)}</span>
                       </div>
                     </div>
 
-                    {/* Customer Row (if present) */}
-                    {sale.customer_name && (
-                      <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-semibold truncate">{sale.customer_name}</span>
-                        </div>
-                        {sale.customer_phone && (
-                          <span className="text-[11px] font-mono text-slate-500 shrink-0">
-                            {sale.customer_phone}
-                          </span>
-                        )}
+                    {/* 2. Total Amount & Item Count */}
+                    <div className="text-right shrink-0">
+                      <div className="font-mono font-black text-slate-950 text-base leading-tight">
+                        {formatCurrency(sale.total_amount)}
                       </div>
-                    )}
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        {sale.items?.length || 0} {sale.items?.length === 1 ? 'item' : 'items'}
+                      </span>
+                    </div>
+                  </div>
 
-                    {/* Items Preview Chips */}
-                    <div className="space-y-1">
-                      {sale.items?.slice(0, 2).map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-[11px] text-slate-700">
-                          <span className="truncate pr-2">{item.product_name}</span>
-                          <span className="font-mono text-slate-500 shrink-0 font-medium">
-                            {item.quantity}x {formatCurrency(item.unit_price)}
+                  {/* Customer Row (if present) */}
+                  {sale.customer_name && (
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-100">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <User className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="font-semibold truncate leading-normal" title={sale.customer_name}>
+                          {sale.customer_name}
+                        </span>
+                      </div>
+                      {sale.customer_phone && (
+                        <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-2">
+                          {sale.customer_phone}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Section 4: Compact Item Preview */}
+                  {sale.items && sale.items.length > 0 && (
+                    <div className="bg-slate-50/60 rounded-xl p-2 border border-slate-100/90 space-y-1">
+                      {sale.items.slice(0, 2).map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-2 text-[11px] text-slate-700">
+                          <span className="truncate min-w-0 font-medium leading-normal" title={item.product_name}>
+                            {item.product_name}
+                          </span>
+                          <span className="font-mono text-slate-500 shrink-0 text-[10px] font-medium whitespace-nowrap">
+                            {item.quantity} × {formatCurrency(item.unit_price)}
                           </span>
                         </div>
                       ))}
-                      {(sale.items?.length || 0) > 2 && (
-                        <div className="text-[10px] text-slate-400 font-semibold italic">
-                          +{(sale.items?.length || 0) - 2} more {(sale.items?.length || 0) - 2 === 1 ? 'item' : 'items'}
+                      {sale.items.length > 2 && (
+                        <div className="text-[10px] text-slate-400 font-medium pt-0.5">
+                          +{(sale.items.length - 2)} more {sale.items.length - 2 === 1 ? 'item' : 'items'}
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* Status Banner (if delete request exists) */}
-                    {req && (
-                      <div className="pt-1">
-                        {req.status === 'pending' && (
-                          <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-slate-600" />
-                            <span>Delete Request Pending</span>
-                          </div>
-                        )}
-                        {req.status === 'approved' && (
-                          <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-bold line-through">
-                            Voided and Approved by Owner
-                          </div>
-                        )}
-                        {req.status === 'rejected' && (
-                          <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
-                            Delete Rejected {req.rejection_reason ? `(${req.rejection_reason})` : ''}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {/* Status banner (if delete request exists) */}
+                  {req && (
+                    <div className="pt-0.5">
+                      {req.status === 'pending' && (
+                        <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-bold flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                          <span>Delete Request Pending</span>
+                        </div>
+                      )}
+                      {req.status === 'approved' && (
+                        <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-bold line-through">
+                          Voided and Approved by Owner
+                        </div>
+                      )}
+                      {req.status === 'rejected' && (
+                        <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
+                          Delete Rejected {req.rejection_reason ? `(${req.rejection_reason})` : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Bottom Action Row */}
-                  <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 mt-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
+                  {/* Section 5: Payment method & Actions */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {renderPaymentBadge(sale.payment_method)}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onPrintReceipt(sale)}
+                        className="p-1.5 text-slate-500 hover:text-black hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        title="Print thermal receipt"
+                        aria-label="Print receipt"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+
                       {(!req || req.status === 'rejected') && (
                         <button
                           type="button"
                           onClick={() => onRequestDelete(sale)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-[11px] transition-all cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Request delete / void receipt"
+                          aria-label="Request delete"
                         >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
 
                       <button
                         type="button"
-                        onClick={() => onPrintReceipt(sale)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-[11px] transition-all cursor-pointer"
-                      >
-                        <Printer className="w-3 h-3" />
-                        <span>Receipt</span>
-                      </button>
-
-                      <button
-                        type="button"
                         onClick={() => setSelectedSale(sale)}
-                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all cursor-pointer"
-                        title="View Details"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs active-scale"
                       >
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        <Eye className="w-3 h-3" />
+                        <span>View</span>
                       </button>
                     </div>
                   </div>

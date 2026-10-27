@@ -110,10 +110,9 @@ describe('CashierSalesHistory Component', () => {
       />
     );
 
-    const searchInput = screen.getByPlaceholderText('Search by receipt ID, customer name, phone, item.');
+    const searchInput = screen.getByPlaceholderText('Search receipts, customers, phone...');
     expect(searchInput).toBeInTheDocument();
     expect(searchInput).toHaveClass('w-full');
-    expect(searchInput).toHaveClass('h-14');
   });
 
   it('filters receipts in real-time by customer name, phone, receipt id, and item name', () => {
@@ -131,7 +130,7 @@ describe('CashierSalesHistory Component', () => {
       />
     );
 
-    const searchInput = screen.getByPlaceholderText('Search by receipt ID, customer name, phone, item.');
+    const searchInput = screen.getByPlaceholderText('Search receipts, customers, phone...');
 
     fireEvent.change(searchInput, { target: { value: 'Su Su' } });
     expect(screen.getAllByText('Su Su').length).toBeGreaterThan(0);
@@ -193,14 +192,14 @@ describe('CashierSalesHistory Component', () => {
       />
     );
 
-    const searchInput = screen.getByPlaceholderText('Search by receipt ID, customer name, phone, item.');
+    const searchInput = screen.getByPlaceholderText('Search receipts, customers, phone...');
     fireEvent.change(searchInput, { target: { value: 'nonexistent-item-or-customer' } });
 
     expect(screen.getByText('No receipts found')).toBeInTheDocument();
     expect(screen.getByText('Try changing your search or filters.')).toBeInTheDocument();
   });
 
-  it('opens filter drawer and filters by payment method with active count badge', () => {
+  it('opens filter drawer with single filter button and filters by payment method with active count badge', () => {
     render(
       <CashierSalesHistory
         sales={mockSales}
@@ -216,6 +215,7 @@ describe('CashierSalesHistory Component', () => {
     );
 
     const filterButtons = screen.getAllByRole('button', { name: /Filters/i });
+    expect(filterButtons.length).toBe(1);
     fireEvent.click(filterButtons[0]);
 
     const kpayBtn = screen.getByRole('button', { name: 'KPay' });
@@ -228,6 +228,28 @@ describe('CashierSalesHistory Component', () => {
     expect(screen.queryByText('Kyaw Kyaw')).not.toBeInTheDocument();
     expect(screen.queryByText('Hla Hla')).not.toBeInTheDocument();
 
-    expect(screen.getAllByRole('button', { name: /Filters \(1\)/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Filters \(1\)/i })).toBeInTheDocument();
+  });
+
+  it('makes View the primary action and opens receipt details modal', () => {
+    render(
+      <CashierSalesHistory
+        sales={mockSales}
+        deleteRequests={[]}
+        isLoading={false}
+        onRefresh={vi.fn()}
+        user={mockUser}
+        businessProfile={mockBusinessProfile}
+        onRequestDelete={vi.fn()}
+        onPrintReceipt={vi.fn()}
+        onStartSelling={vi.fn()}
+      />
+    );
+
+    const viewButtons = screen.getAllByRole('button', { name: /^View$/i });
+    expect(viewButtons.length).toBeGreaterThan(0);
+    fireEvent.click(viewButtons[0]);
+
+    expect(screen.getByText('Receipt Details')).toBeInTheDocument();
   });
 });
