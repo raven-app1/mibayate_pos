@@ -1184,12 +1184,31 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 block">Barcode Symbology</span>
-                    <span className="text-[10px] text-slate-500 font-medium">Standard 1D retail barcode format</span>
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Barcode Settings</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Standard 1D retail format</span>
+                    </div>
+                    <span className="font-mono bg-black text-white px-2.5 py-0.5 rounded-lg text-xs font-extrabold">CODE 128</span>
                   </div>
-                  <span className="font-mono bg-black text-white px-2.5 py-0.5 rounded-lg text-xs font-extrabold">CODE 128</span>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                    <MmInput
+                      label="Barcode Width"
+                      value={config.barcodeWidth !== undefined ? config.barcodeWidth : effBarcodeWidth.toFixed(1)}
+                      onChange={val => updateConfig(p => ({ ...p, barcodeWidth: val, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, w: val } } }))}
+                      min={10}
+                      max={effLabelWidth}
+                    />
+                    <MmInput
+                      label="Barcode Height"
+                      value={config.barcodeHeight}
+                      onChange={val => updateConfig(p => ({ ...p, barcodeHeight: val, layoutXY: { ...p.layoutXY, barcode: { ...p.layoutXY.barcode, h: val } } }))}
+                      min={4}
+                      max={effLabelHeight}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1487,14 +1506,26 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
 
           {/* G. Bottom Action Bar */}
           <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset to Defaults</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset to Defaults</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestPrint}
+                disabled={!btConnected || btPrinting}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              >
+                {btPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+                <span>Print Test Label</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
@@ -1507,7 +1538,7 @@ export const LabelGeneratorTab: React.FC<LabelGeneratorTabProps> = ({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>{showBulkPrint ? 'Close Bulk Print' : `Bulk Print (${printItemsList.length})`}</span>
+                <span>{showBulkPrint ? 'Hide Bulk Print' : `Bulk Print (${printItemsList.length})`}</span>
               </button>
 
               <button
