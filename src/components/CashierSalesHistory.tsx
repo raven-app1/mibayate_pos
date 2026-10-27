@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   History,
   Filter,
@@ -23,6 +23,7 @@ import {
   ShoppingBag,
   Clock,
   ChevronRight,
+  ChevronDown,
   AlertCircle
 } from 'lucide-react';
 import { SaleWithItems, SaleDeleteRequest, UserProfile, BusinessProfile } from '../types';
@@ -44,8 +45,8 @@ interface CashierSalesHistoryProps {
   onStartSelling: () => void;
 }
 
-type DatePreset = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type PaymentFilter = 'all' | 'cash' | 'card' | 'mobile' | 'kbzpay' | 'ayapay' | 'wavepay' | 'other';
+type DatePreset = 'all' | 'today' | 'week' | 'month' | 'custom';
+type PaymentFilter = 'all' | 'cash' | 'kpay' | 'wavepay' | 'card';
 type StatusFilter = 'all' | 'completed' | 'pending' | 'approved' | 'rejected';
 type SortOption = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
 type ViewMode = 'table' | 'cards';
@@ -73,8 +74,32 @@ export default function CashierSalesHistory({
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleWithItems | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const sortDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setShowSortDropdown(false);
+      }
+    };
+    if (showSortDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSortDropdown]);
+
+  const sortOptions: Array<{ id: SortOption; label: string }> = [
+    { id: 'newest', label: 'Newest First' },
+    { id: 'oldest', label: 'Oldest First' },
+    { id: 'amount_high', label: 'Highest Amount' },
+    { id: 'amount_low', label: 'Lowest Amount' },
+  ];
+
+  const selectedSortLabel = sortOptions.find(o => o.id === sortBy)?.label || 'Newest First';
 
   useBackDismiss(selectedSale !== null, () => setSelectedSale(null));
 
@@ -89,6 +114,14 @@ export default function CashierSalesHistory({
     }
     return map;
   }, [deleteRequests]);
+
+  const appliedFilterCount = useMemo(() => {
+    let count = 0;
+    if (datePreset !== 'all') count++;
+    if (paymentFilter !== 'all') count++;
+    if (minAmount.trim() || maxAmount.trim()) count++;
+    return count;
+  }, [datePreset, paymentFilter, minAmount, maxAmount]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -133,16 +166,6 @@ export default function CashierSalesHistory({
         saleDate.getFullYear() === now.getFullYear() &&
         saleDate.getMonth() === now.getMonth() &&
         saleDate.getDate() === now.getDate()
-      );
-    }
-
-    if (preset === 'yesterday') {
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      return (
-        saleDate.getFullYear() === yesterday.getFullYear() &&
-        saleDate.getMonth() === yesterday.getMonth() &&
-        saleDate.getDate() === yesterday.getDate()
       );
     }
 
@@ -200,10 +223,16 @@ export default function CashierSalesHistory({
       }
 
       if (paymentFilter !== 'all') {
-        if (paymentFilter === 'mobile') {
-          const isMobileMethod = ['mobile', 'kbzpay', 'ayapay', 'wavepay', 'other'].includes(sale.payment_method);
-          if (!isMobileMethod) return false;
-        } else if (sale.payment_method !== paymentFilter) {
+        const method = (sale.payment_method || '').toLowerCase();
+        if (paymentFilter === 'kpay') {
+          if (method !== 'kpay' && method !== 'kbzpay') return false;
+        } else if (paymentFilter === 'wavepay') {
+          if (method !== 'wavepay') return false;
+        } else if (paymentFilter === 'cash') {
+          if (method !== 'cash') return false;
+        } else if (paymentFilter === 'card') {
+          if (method !== 'card') return false;
+        } else if (method !== paymentFilter) {
           return false;
         }
       }
@@ -268,6 +297,26 @@ export default function CashierSalesHistory({
     toast(`Exported ${filteredSales.length} sales to Excel`, 'success');
   };
 
+  const getPaymentLabel = (filter: PaymentFilter) => {
+    switch (filter) {
+      case 'cash': return 'Cash';
+      case 'kpay': return 'KPay';
+      case 'wavepay': return 'WavePay';
+      case 'card': return 'Card';
+      default: return filter;
+    }
+  };
+
+  const getDatePresetLabel = (preset: DatePreset) => {
+    switch (preset) {
+      case 'today': return 'Today';
+      case 'week': return 'Last 7 Days';
+      case 'month': return 'This Month';
+      case 'custom': return 'Custom';
+      default: return preset;
+    }
+  };
+
   const renderPaymentBadge = (method: string) => {
     if (method === 'cash') {
       return (
@@ -277,19 +326,11 @@ export default function CashierSalesHistory({
         </span>
       );
     }
-    if (method === 'kbzpay') {
+    if (method === 'kbzpay' || method === 'kpay') {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs">
           <Smartphone className="w-3 h-3 text-slate-200" />
-          <span>KBZPay</span>
-        </span>
-      );
-    }
-    if (method === 'ayapay') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs">
-          <Smartphone className="w-3 h-3 text-slate-200" />
-          <span>AYA Pay</span>
+          <span>KPay</span>
         </span>
       );
     }
@@ -298,6 +339,22 @@ export default function CashierSalesHistory({
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs">
           <Smartphone className="w-3 h-3 text-slate-200" />
           <span>WavePay</span>
+        </span>
+      );
+    }
+    if (method === 'card' || method === 'credit' || method === 'debit') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+          <CreditCard className="w-3 h-3 text-slate-700" />
+          <span>Card</span>
+        </span>
+      );
+    }
+    if (method === 'ayapay') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-900 text-white shadow-2xs">
+          <Smartphone className="w-3 h-3 text-slate-200" />
+          <span>AYA Pay</span>
         </span>
       );
     }
@@ -399,18 +456,13 @@ export default function CashierSalesHistory({
               type="button"
               onClick={() => setShowFilterDrawer(true)}
               className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                activeFilterCount > 0
+                appliedFilterCount > 0
                   ? 'bg-black text-white hover:bg-gray-800'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
-              <span>Filters</span>
-              {activeFilterCount > 0 && (
-                <span className="w-4.5 h-4.5 rounded-full bg-white text-black text-[10px] font-black flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
+              <span>{appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : 'Filters'}</span>
             </button>
 
             <button
@@ -437,45 +489,36 @@ export default function CashierSalesHistory({
         </div>
       </div>
 
-      <div className="android-card p-3 sm:p-4 border border-slate-200/80 bg-white space-y-3">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by receipt ID, customer name, phone, item..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-black focus:bg-white transition-all"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+      {/* Controls Card: Search bar + Filter & Sort row */}
+      <div className="android-card p-3.5 sm:p-5 border border-slate-200/80 bg-white space-y-3 shadow-xs">
+        {/* Full-width Search Bar */}
+        <div className="relative w-full">
+          <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search by receipt ID, customer name, phone, item."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-14 pl-12 pr-11 bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-black transition-all shadow-2xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-700 rounded-xl cursor-pointer transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
-          {/* Quick Sort & View Mode Switches (Desktop) */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort sales history by"
-                className="pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-black cursor-pointer appearance-none"
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="amount_high">Highest Amount</option>
-                <option value="amount_low">Lowest Amount</option>
-              </select>
-              <ArrowUpDown className="w-3 h-3 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+        {/* Row below search bar: Results count on left, Filters + Sort aligned right */}
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-bold text-slate-600 truncate">
+              {filteredSales.length} {filteredSales.length === 1 ? 'receipt' : 'receipts'}
+            </span>
 
             {/* Desktop View Switcher */}
             <div className="hidden sm:flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
@@ -501,15 +544,70 @@ export default function CashierSalesHistory({
               </button>
             </div>
           </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Filters Button */}
+            <button
+              type="button"
+              onClick={() => setShowFilterDrawer(true)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-2xs ${
+                appliedFilterCount > 0
+                  ? 'bg-black text-white border-black'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>{appliedFilterCount > 0 ? `Filters (${appliedFilterCount})` : 'Filters'}</span>
+            </button>
+
+            {/* Custom Sort Dropdown */}
+            <div className="relative" ref={sortDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowSortDropdown(!showSortDropdown)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                aria-haspopup="listbox"
+                aria-expanded={showSortDropdown}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                <span>{selectedSortLabel}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${showSortDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showSortDropdown && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-2xl border border-slate-200 shadow-xl py-1 z-30 animate-fade-in">
+                  {sortOptions.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(opt.id);
+                        setShowSortDropdown(false);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                        sortBy === opt.id
+                          ? 'bg-slate-100 text-black'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {sortBy === opt.id && <Check className="w-3.5 h-3.5 text-black" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {activeFilterCount > 0 && (
-          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-100 text-xs">
-            <span className="text-[11px] font-bold text-slate-500">Active Filters:</span>
+        {/* Active Filter Chips */}
+        {(appliedFilterCount > 0 || searchQuery.trim()) && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100 text-xs">
+            <span className="text-[11px] font-bold text-slate-500">Active:</span>
 
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium">
-                <span>Search: &ldquo;{searchQuery}&rdquo;</span>
+            {searchQuery.trim() && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span>Search: &ldquo;{searchQuery.trim()}&rdquo;</span>
                 <button type="button" onClick={() => setSearchQuery('')} className="hover:text-black cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
@@ -517,8 +615,8 @@ export default function CashierSalesHistory({
             )}
 
             {datePreset !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium">
-                <span>Date: {datePreset.toUpperCase()}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span>Date: {getDatePresetLabel(datePreset)}</span>
                 <button type="button" onClick={() => setDatePreset('all')} className="hover:text-black cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
@@ -526,27 +624,34 @@ export default function CashierSalesHistory({
             )}
 
             {paymentFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium">
-                <span>Payment: {paymentFilter.toUpperCase()}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span>Payment: {getPaymentLabel(paymentFilter)}</span>
                 <button type="button" onClick={() => setPaymentFilter('all')} className="hover:text-black cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
 
-            {statusFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium">
-                <span>Status: {statusFilter.toUpperCase()}</span>
-                <button type="button" onClick={() => setStatusFilter('all')} className="hover:text-black cursor-pointer">
+            {(minAmount.trim() || maxAmount.trim()) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span>Amount: {minAmount.trim() ? `${minAmount} Ks` : '0 Ks'} - {maxAmount.trim() ? `${maxAmount} Ks` : 'Any'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinAmount('');
+                    setMaxAmount('');
+                  }}
+                  className="hover:text-black cursor-pointer"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
 
-            {(minAmount || maxAmount) && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium">
-                <span>Amount: {minAmount || '0'} - {maxAmount || '∞'}</span>
-                <button type="button" onClick={() => { setMinAmount(''); setMaxAmount(''); }} className="hover:text-black cursor-pointer">
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-medium text-[11px]">
+                <span>Status: {statusFilter.toUpperCase()}</span>
+                <button type="button" onClick={() => setStatusFilter('all')} className="hover:text-black cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -592,9 +697,9 @@ export default function CashierSalesHistory({
           <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
             <Search className="w-7 h-7" />
           </div>
-          <h3 className="text-base font-bold text-slate-900">No Matching Receipts Found</h3>
+          <h3 className="text-base font-bold text-slate-900">No receipts found</h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
-            Try adjusting your search keywords, clearing date filters, or switching payment methods.
+            Try changing your search or filters.
           </p>
           <button
             type="button"
@@ -881,34 +986,45 @@ export default function CashierSalesHistory({
         onClose={() => setShowFilterDrawer(false)}
         title="Filter Sales History"
         subtitle="Refine your processed receipts"
-        activeCount={activeFilterCount}
+        activeCount={appliedFilterCount}
         onReset={resetFilters}
       >
         <div className="space-y-4">
-          {/* Search Filter */}
+          {/* Payment Method Selector */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Search</label>
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Receipt ID, customer, phone, item..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-black focus:bg-white"
-              />
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { val: 'all', label: 'All' },
+                { val: 'cash', label: 'Cash' },
+                { val: 'kpay', label: 'KPay' },
+                { val: 'wavepay', label: 'WavePay' },
+                { val: 'card', label: 'Card' },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setPaymentFilter(opt.val as PaymentFilter)}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                    paymentFilter === opt.val
+                      ? 'bg-black text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
           {/* Date Range Selector */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Date Period</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Date Range</label>
             <div className="grid grid-cols-3 gap-1.5">
               {[
-                { id: 'all', label: 'All' },
+                { id: 'all', label: 'All Dates' },
                 { id: 'today', label: 'Today' },
-                { id: 'yesterday', label: 'Yesterday' },
-                { id: 'week', label: '7 Days' },
+                { id: 'week', label: 'Last 7 Days' },
                 { id: 'month', label: 'This Month' },
                 { id: 'custom', label: 'Custom' }
               ].map((tab) => (
@@ -951,32 +1067,30 @@ export default function CashierSalesHistory({
             )}
           </div>
 
-          {/* Payment Method Selector */}
+          {/* Amount Range Filter */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Amount Range (Ks)</label>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { val: 'all', label: 'All Methods' },
-                { val: 'cash', label: 'Cash' },
-                { val: 'mobile', label: 'All Mobile / QR' },
-                { val: 'kbzpay', label: 'KBZPay' },
-                { val: 'ayapay', label: 'AYA Pay' },
-                { val: 'wavepay', label: 'WavePay' },
-                { val: 'other', label: 'Other Wallet' },
-              ].map((opt) => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  onClick={() => setPaymentFilter(opt.val as PaymentFilter)}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
-                    paymentFilter === opt.val
-                      ? 'bg-black text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Min Amount</label>
+                <input
+                  type="number"
+                  placeholder="Min amount"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-black focus:bg-white transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Max Amount</label>
+                <input
+                  type="number"
+                  placeholder="Max amount"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-black focus:bg-white transition-all"
+                />
+              </div>
             </div>
           </div>
 
@@ -1004,27 +1118,6 @@ export default function CashierSalesHistory({
                   {opt.label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Amount Range Filter */}
-          <div className="space-y-1.5 pt-2 border-t border-slate-100">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Amount Range (Ks)</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                placeholder="Min Ks"
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
-              />
-              <input
-                type="number"
-                placeholder="Max Ks"
-                value={maxAmount}
-                onChange={(e) => setMaxAmount(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
-              />
             </div>
           </div>
         </div>
