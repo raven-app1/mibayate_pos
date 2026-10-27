@@ -4,11 +4,12 @@ import {
   AlertCircle, Save, X, RefreshCw, Cable, Radio, Info, Smartphone, ChevronDown
 } from 'lucide-react';
 import * as printerBridge from '../lib/printerBridge';
-import { text, separator, feed, cut, init as escInit, setCodePage } from '../lib/escpos';
+import { printSaleSlip } from '../lib/escpos';
 import { testPrintTspl } from '../lib/tspl';
 import { ensureLabelFont } from '../lib/labelRaster';
 import { loadLabelConfig, computeLabelOffsetMm } from '../lib/labelConfig';
 import { useToast } from '../utils/toast';
+import { SaleWithItems, BusinessProfile } from '../types';
 
 // PRINTER_ROLE keys: role -> immutable localStorage key
 const BARCODE_KEY = 'mibayate_barcode_printer';
@@ -139,26 +140,34 @@ export const PrinterSettings: React.FC<PrinterSettingsProps> = ({ storeName }) =
           computeLabelOffsetMm(cfg),
         ));
       } else {
-        await printerBridge.send(escInit());
-        await printerBridge.send(setCodePage('CP437'));
-
-        const rows = [
-          text(storeName || 'My Store', { align: 'center', bold: true, width: 2, height: 2 }),
-          separator('-', 32),
-          text('TEST RECEIPT', { align: 'center', bold: true }),
-          separator('-', 32),
-          text('1 x Test Product     25.00'),
-          text('Total              25.00'),
-          text('Change               0.00'),
-          separator('=', 32),
-          text('Thank you for shopping!', { align: 'center' }),
-          feed(4),
-          cut(),
-        ];
-        for (const r of rows) {
-          await printerBridge.send(r);
-          await new Promise(res => setTimeout(res, 60));
-        }
+        const sampleSale: SaleWithItems = {
+          id: 'TEST-0001',
+          cashier_id: 'test',
+          cashier_name: 'Cashier Staff',
+          branch_name: 'Main Store',
+          total_amount: 25000,
+          discount: 0,
+          payment_method: 'cash',
+          created_at: new Date().toISOString(),
+          items: [
+            {
+              id: 'item-1',
+              sale_id: 'TEST-0001',
+              product_id: 'p1',
+              product_name: 'Sample Retail Item',
+              quantity: 1,
+              unit_price: 25000,
+              unit_cost: 18000,
+              total: 25000,
+            }
+          ]
+        };
+        const sampleBusiness: BusinessProfile = {
+          name: storeName || cfg.storeName || 'Mibayate POS',
+          currency: 'Ks',
+          receipt_footer: 'Thank you for shopping with us! Please come again.',
+        };
+        await printSaleSlip(sampleSale, sampleBusiness, { paperWidthMm: parseFloat(cfg.paperWidth) || 72 });
       }
 
       toast(`${role === 'barcode' ? 'Barcode' : 'Slip'} test printed.`, 'success');

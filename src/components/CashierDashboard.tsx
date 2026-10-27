@@ -4,7 +4,7 @@ import {
   Search, ShoppingCart, LogOut, RefreshCw, User, ShoppingBag, 
   Minus, Plus, Trash2, DollarSign, Smartphone, Check, 
   FileText, Tag, ArrowRight, Printer, AlertCircle, Sparkles, Filter, ChevronDown, Menu, X, History, Camera,
-  SlidersHorizontal, FileSpreadsheet
+  SlidersHorizontal, FileSpreadsheet, Loader2, Bluetooth
 } from 'lucide-react';
 import { dbService, DEFAULT_BUSINESS_PROFILE } from '../lib/supabase';
 import { subscribeToDataChanges } from '../lib/realtimeSync';
@@ -12,6 +12,8 @@ import { Product, SaleWithItems, UserProfile, BusinessProfile, SaleDeleteRequest
 import { formatCurrency } from '../utils/format';
 import { useToast } from '../utils/toast';
 import { exportSalesReportToXlsx } from '../utils/excelExport';
+import * as printerBridge from '../lib/printerBridge';
+import { printSaleSlip } from '../lib/escpos';
 import SearchableCategorySelect from './SearchableCategorySelect';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import UiSizeModal from './UiSizeModal';
@@ -104,6 +106,62 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const [showScanner, setShowScanner] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUiSizeModal, setShowUiSizeModal] = useState(false);
+
+  const isNative = printerBridge.isNativeShell();
+  const [btConnected, setBtConnected] = useState(() => printerBridge.isConnected());
+  const [printerName, setPrinterName] = useState(() => printerBridge.getDeviceName());
+  const [isPrintingSlip, setIsPrintingSlip] = useState(false);
+
+  useEffect(() => {
+    if (isNative && !printerBridge.isConnected()) {
+      printerBridge.autoConnectLastPrinter().then(name => {
+        if (name) {
+          setBtConnected(true);
+          setPrinterName(name);
+        }
+      }).catch(() => {});
+    }
+
+    printerBridge.onDisconnect(() => {
+      setBtConnected(false);
+      setPrinterName('');
+    });
+    return () => {
+      printerBridge.offDisconnect();
+    };
+  }, [isNative]);
+
+  const handlePrintThermalSlip = async (targetSale?: SaleWithItems) => {
+    const sale = targetSale || completedSale;
+    if (!sale) return;
+    setIsPrintingSlip(true);
+    try {
+      if (!printerBridge.isConnected()) {
+        const auto = await printerBridge.autoConnectLastPrinter();
+        if (!auto) {
+          const paired = await printerBridge.getPairedPrinters();
+          if (paired.length > 0) {
+            const connected = await printerBridge.connect(paired[0]);
+            setBtConnected(true);
+            setPrinterName(connected);
+          } else {
+            const connected = await printerBridge.connect();
+            setBtConnected(true);
+            setPrinterName(connected);
+          }
+        } else {
+          setBtConnected(true);
+          setPrinterName(auto);
+        }
+      }
+      await printSaleSlip(sale, businessProfile, { paperWidthMm: 72 });
+      toast('Thermal sale slip printed successfully!', 'success');
+    } catch (err: any) {
+      toast(err?.message || 'Failed to print thermal slip. Check printer connection.', 'error');
+    } finally {
+      setIsPrintingSlip(false);
+    }
+  };
 
   useBackDismiss(showLogoutConfirm, () => setShowLogoutConfirm(false));
   useBackDismiss(showCartModal, () => setShowCartModal(false));
@@ -348,6 +406,9 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       const sale = await dbService.sales.checkout(cart, selectedPayment, safeDiscount, user, { name: customerName, phone: customerPhone }, taxAmount);
       setCompletedSale(sale);
       setShowReceipt(true);
+      if (printerBridge.isConnected()) {
+        handlePrintThermalSlip(sale);
+      }
       clearCart();
       setCustomerName('');
       setCustomerPhone('');
@@ -794,6 +855,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
             onPrintReceipt={(sale) => {
               setCompletedSale(sale);
               setShowReceipt(true);
+              handlePrintThermalSlip(sale);
             }}
             onStartSelling={() => handleTabSwitch('pos')}
           />
@@ -1061,14 +1123,31 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-3 safe-area-bottom bg-white">
-              <button type="button" onClick={() => window.print()} className="flex-1 inline-flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition-all cursor-pointer active-scale">
-                <Printer className="w-4 h-4" />
-                Print
+            <div className="p-4 border-t border-slate-100 flex gap-2.5 safe-area-bottom bg-white">
+              <button
+                type="button"
+                onClick={() => handlePrintThermalSlip()}
+                disabled={isPrintingSlip}
+                className="flex-1 inline-flex items-center justify-center gap-2 py-3 bg-black hover:bg-gray-800 text-white rounded-2xl font-bold text-sm transition-all cursor-pointer active-scale shadow-sm disabled:opacity-50"
+              >
+                {isPrintingSlip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                <span>{isPrintingSlip ? 'Printing...' : 'Print Thermal Slip'}</span>
               </button>
-              <button type="button" onClick={() => { setShowReceipt(false); setCompletedSale(null); }} className="flex-1 inline-flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-800 text-white rounded-2xl font-bold text-sm transition-all shadow-lg shadow-black/20 cursor-pointer active-scale">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-sm transition-all cursor-pointer active-scale"
+                title="System / PDF Print"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowReceipt(false); setCompletedSale(null); }}
+                className="flex-1 inline-flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl font-bold text-sm transition-all cursor-pointer active-scale"
+              >
                 <Check className="w-4 h-4" />
-                New Sale
+                <span>New Sale</span>
               </button>
             </div>
           </div>

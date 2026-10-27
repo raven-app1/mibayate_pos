@@ -287,7 +287,7 @@ function layoutText(ctx: CanvasRenderingContext2D, run: RasterTextRun): TextLayo
   return { font, px, lineHeight, lines };
 }
 
-function packCanvas(ctx: CanvasRenderingContext2D, widthDots: number, heightDots: number): RasterImage {
+export function packCanvas(ctx: CanvasRenderingContext2D, widthDots: number, heightDots: number): RasterImage {
   const widthBytes = Math.ceil(widthDots / 8);
   const data = new Uint8Array(widthBytes * heightDots);
   const pixels = ctx.getImageData(0, 0, widthDots, heightDots).data;
