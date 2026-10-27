@@ -111,6 +111,21 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const [btConnected, setBtConnected] = useState(() => printerBridge.isConnected());
   const [printerName, setPrinterName] = useState(() => printerBridge.getDeviceName());
   const [isPrintingSlip, setIsPrintingSlip] = useState(false);
+  const [showPrinterModal, setShowPrinterModal] = useState(false);
+  const [pairedDevices, setPairedDevices] = useState<printerBridge.PairedPrinter[]>([]);
+  const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
+  const [printerError, setPrinterError] = useState<string | null>(null);
+
+  const loadPairedPrinters = useCallback(async () => {
+    if (isNative) {
+      try {
+        const devs = await printerBridge.getPairedPrinters();
+        setPairedDevices(devs);
+      } catch (err: any) {
+        console.warn('Failed to load paired printers:', err);
+      }
+    }
+  }, [isNative]);
 
   useEffect(() => {
     if (isNative && !printerBridge.isConnected()) {
@@ -136,6 +151,33 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       setIsPrintingSlip(false);
     }
   }, [showReceipt]);
+
+  const handleConnectPrinter = async (device?: printerBridge.PairedPrinter) => {
+    setIsConnectingPrinter(true);
+    setPrinterError(null);
+    try {
+      const name = await printerBridge.connect(device);
+      setBtConnected(true);
+      setPrinterName(name);
+      toast(`Connected to ${name}`, 'success');
+    } catch (err: any) {
+      setPrinterError(err?.message || 'Failed to connect to printer');
+      toast(err?.message || 'Failed to connect to printer', 'error');
+    } finally {
+      setIsConnectingPrinter(false);
+    }
+  };
+
+  const handleDisconnectPrinter = async () => {
+    try {
+      await printerBridge.disconnect();
+      setBtConnected(false);
+      setPrinterName('');
+      toast('Printer disconnected', 'info');
+    } catch (err: any) {
+      console.warn('Disconnect error:', err);
+    }
+  };
 
   const handlePrintThermalSlip = async (targetSale?: SaleWithItems) => {
     const sale = targetSale || completedSale;
@@ -174,6 +216,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   useBackDismiss(showHeldCartsModal, () => setShowHeldCartsModal(false));
   useBackDismiss(showReceipt, () => { setShowReceipt(false); setCompletedSale(null); });
   useBackDismiss(saleToDelete !== null, () => setSaleToDelete(null));
+  useBackDismiss(showPrinterModal, () => setShowPrinterModal(false));
 
   const handleTabSwitch = (tab: 'pos' | 'history') => {
     if (tab === activeTab) return;
@@ -668,6 +711,25 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => {
+                loadPairedPrinters();
+                setShowPrinterModal(true);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                btConnected
+                  ? 'bg-black text-white border-black shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="Bluetooth Receipt Printer Setup"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden md:inline max-w-[120px] truncate">
+                {btConnected ? (printerName || 'Printer Connected') : 'Connect Printer'}
+              </span>
+              <span className={`w-1.5 h-1.5 rounded-full ${btConnected ? 'bg-white' : 'bg-slate-400'}`} />
+            </button>
+            <button
               onClick={() => handleTabSwitch(activeTab === 'pos' ? 'history' : 'pos')}
               className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors hidden sm:flex items-center gap-1.5 cursor-pointer"
             >
@@ -1125,6 +1187,24 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
                 </div>
               </div>
             </div>
+            <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Bluetooth className={`w-3.5 h-3.5 shrink-0 ${btConnected ? 'text-black' : 'text-slate-400'}`} />
+                <span className="truncate text-slate-700 font-medium text-[11px]">
+                  {btConnected ? `Printer: ${printerName || 'Connected'}` : 'Printer: Disconnected'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  loadPairedPrinters();
+                  setShowPrinterModal(true);
+                }}
+                className="text-xs font-bold text-slate-900 hover:underline cursor-pointer shrink-0 ml-2"
+              >
+                {btConnected ? 'Change' : 'Connect'}
+              </button>
+            </div>
             <div className="p-4 border-t border-slate-100 flex gap-2.5 safe-area-bottom bg-white">
               <button
                 type="button"
@@ -1150,6 +1230,161 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
               >
                 <Check className="w-4 h-4" />
                 <span>New Sale</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cashier Bluetooth Printer Selection Modal */}
+      {showPrinterModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowPrinterModal(false)}>
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full border border-slate-200 shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-black text-white rounded-xl">
+                  <Printer className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900">Receipt Printer Setup</h4>
+                  <p className="text-xs text-slate-500 font-medium">Connect Bluetooth ESC/POS printer</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrinterModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current Connection Status */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              btConnected ? 'bg-slate-50 border-black/30' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <Bluetooth className={`w-4 h-4 ${btConnected ? 'text-black' : 'text-slate-400'}`} />
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Status</span>
+                  <span className="text-xs font-extrabold text-slate-900">
+                    {btConnected ? (printerName || 'Printer Connected') : 'No Printer Connected'}
+                  </span>
+                </div>
+              </div>
+
+              {btConnected ? (
+                <button
+                  type="button"
+                  onClick={handleDisconnectPrinter}
+                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-600">
+                  Offline
+                </span>
+              )}
+            </div>
+
+            {printerError && (
+              <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center justify-between">
+                <span>{printerError}</span>
+                <button type="button" onClick={() => setPrinterError(null)} className="text-red-500 hover:text-red-800">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Paired devices (Android native) */}
+            {isNative ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-800">Paired Bluetooth Printers</span>
+                  <button
+                    type="button"
+                    onClick={loadPairedPrinters}
+                    className="text-[11px] font-bold text-slate-600 hover:text-black flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {pairedDevices.length === 0 ? (
+                    <div className="p-3 bg-slate-50 rounded-xl text-center text-xs text-slate-500 border border-dashed border-slate-200">
+                      No paired Bluetooth printers found.<br />
+                      Pair your printer in Android Bluetooth Settings first.
+                    </div>
+                  ) : (
+                    pairedDevices.map(dev => {
+                      const isThisConnected = btConnected && printerName === dev.name;
+                      return (
+                        <div
+                          key={dev.address}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                            isThisConnected
+                              ? 'bg-slate-100 border-black'
+                              : 'bg-white border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="font-bold text-xs text-slate-900 truncate">{dev.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">{dev.address}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleConnectPrinter(dev)}
+                            disabled={isConnectingPrinter || isThisConnected}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isThisConnected
+                                ? 'bg-black text-white cursor-default'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                            }`}
+                          >
+                            {isThisConnected ? 'Connected' : isConnectingPrinter ? 'Connecting...' : 'Connect'}
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleConnectPrinter()}
+                  disabled={isConnectingPrinter}
+                  className="w-full py-2.5 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isConnectingPrinter ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />}
+                  <span>{isConnectingPrinter ? 'Searching...' : 'Pair via Web Bluetooth'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Test Print button inside the modal */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => handlePrintThermalSlip()}
+                disabled={!btConnected || isPrintingSlip}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Test Receipt Print</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowPrinterModal(false)}
+                className="px-4 py-2 bg-black hover:bg-gray-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Done
               </button>
             </div>
           </div>
