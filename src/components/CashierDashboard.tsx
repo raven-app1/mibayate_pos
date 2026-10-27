@@ -131,6 +131,12 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
     };
   }, [isNative]);
 
+  useEffect(() => {
+    if (!showReceipt) {
+      setIsPrintingSlip(false);
+    }
+  }, [showReceipt]);
+
   const handlePrintThermalSlip = async (targetSale?: SaleWithItems) => {
     const sale = targetSale || completedSale;
     if (!sale) return;
@@ -406,9 +412,6 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       const sale = await dbService.sales.checkout(cart, selectedPayment, safeDiscount, user, { name: customerName, phone: customerPhone }, taxAmount);
       setCompletedSale(sale);
       setShowReceipt(true);
-      if (printerBridge.isConnected()) {
-        handlePrintThermalSlip(sale);
-      }
       clearCart();
       setCustomerName('');
       setCustomerPhone('');
@@ -855,7 +858,6 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
             onPrintReceipt={(sale) => {
               setCompletedSale(sale);
               setShowReceipt(true);
-              handlePrintThermalSlip(sale);
             }}
             onStartSelling={() => handleTabSwitch('pos')}
           />
