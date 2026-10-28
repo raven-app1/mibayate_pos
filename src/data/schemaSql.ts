@@ -1,20 +1,13 @@
 export const SUPABASE_SCHEMA_SQL = `-- ============================================================
 -- Mibaya POS — Final Supabase Schema
--- Run this in Supabase SQL Editor to set up all tables, RLS,
--- and the auth trigger. Safe to re-run (uses IF NOT EXISTS).
+-- Run this once in the Supabase SQL Editor to set up all tables,
+-- RLS, and the auth trigger.
+--
+-- This script never drops or deletes data. On a project that is
+-- already set up it stops at the first existing table and leaves
+-- everything untouched. Existing projects should apply the files
+-- in supabase_migrations/ instead of re-running this script.
 -- ============================================================
-
--- ── 0. Clean slate ────────────────────────────────────────────
-DROP TABLE IF EXISTS public.sale_delete_requests CASCADE;
-DROP TABLE IF EXISTS public.cash_flow CASCADE;
-DROP TABLE IF EXISTS public.inventory_transactions CASCADE;
-DROP TABLE IF EXISTS public.sale_items CASCADE;
-DROP TABLE IF EXISTS public.sales CASCADE;
-DROP TABLE IF EXISTS public.product_stock CASCADE;
-DROP TABLE IF EXISTS public.products CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-DROP TABLE IF EXISTS public.branches CASCADE;
-DROP TABLE IF EXISTS public.business_settings CASCADE;
 
 -- ── 1. Profiles ──────────────────────────────────────────────
 CREATE TABLE public.profiles (

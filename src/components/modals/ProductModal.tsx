@@ -48,6 +48,22 @@ export default function ProductModal({
 }: ProductModalProps) {
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const ownedBranch = useMemo(() => {
+    if (user.role !== 'manager') return null;
+    const key = (user.branch_id || '').trim().toLowerCase();
+    const nameKey = (user.branch_name || '').trim().toLowerCase();
+    return branches.find(b => {
+      const id = b.id.trim().toLowerCase();
+      const code = (b.code || '').trim().toLowerCase();
+      const name = (b.name || '').trim().toLowerCase();
+      return (key !== '' && (id === key || code === key || name === key)) ||
+             (nameKey !== '' && (name === nameKey || code === nameKey));
+    }) || null;
+  }, [branches, user.role, user.branch_id, user.branch_name]);
+  const stockBranches = useMemo(
+    () => (user.role === 'manager' ? (ownedBranch ? [ownedBranch] : []) : branches),
+    [branches, user.role, ownedBranch]
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -134,15 +150,23 @@ export default function ProductModal({
   const onSubmit = async (data: ProductFormData) => {
     setFormError(null);
     setFormSuccess(null);
+
+    if (user.role === 'manager' && !ownedBranch) {
+      const msg = 'Your account is not linked to a branch. Ask the owner to assign your branch before saving products.';
+      setFormError(msg);
+      toast(msg, 'error');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const targetBranchId = user.role === 'manager'
-        ? (editingProduct?.branch_id || user.branch_id || null)
+        ? (editingProduct?.branch_id || ownedBranch?.id || null)
         : (editingProduct?.branch_id || null);
       const selectedBranch = branches.find(b => b.id === targetBranchId);
       
-      const stocksList: ProductStock[] = branches.map(b => ({
+      const stocksList: ProductStock[] = stockBranches.map(b => ({
         id: `pstock-${editingProduct?.id || 'new'}-${b.id}`,
         product_id: editingProduct?.id || '',
         branch_id: b.id,
@@ -182,6 +206,12 @@ export default function ProductModal({
     } catch (err: any) {
       console.error('Error saving product:', err);
       const msg = err?.message || '';
+      if (err?.productCreated) {
+        toast(msg || 'Product was created, but its stock could not be saved.', 'error');
+        onSuccess();
+        onClose();
+        return;
+      }
       if (
         err?.code === '42501' ||
         /row-level security|permission denied|violates.*policy/i.test(msg)

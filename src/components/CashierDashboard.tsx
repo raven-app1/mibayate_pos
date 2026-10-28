@@ -72,6 +72,7 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
@@ -306,8 +307,10 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
       ]);
       setProducts(data);
       if (biz) setBusinessProfile(biz);
+      setLoadError(null);
     } catch (err) {
       console.error('Failed to load products:', err);
+      setLoadError('Could not load inventory. Check your connection and try again.');
     } finally {
       if (!silent) setIsLoading(false);
     }
@@ -766,6 +769,19 @@ export default function CashierDashboard({ user, onLogout }: CashierDashboardPro
           </div>
         </div>
       </header>
+
+      {loadError && !isLoading && (
+        <div className="shrink-0 mx-3 mt-3 px-3 py-2 rounded-xl border border-red-200 bg-red-50 text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <span className="flex-1 font-semibold">{loadError}</span>
+          <button
+            onClick={() => loadProducts()}
+            className="shrink-0 px-2.5 py-1 rounded-lg bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">

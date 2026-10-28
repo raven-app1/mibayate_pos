@@ -121,6 +121,77 @@ const collectProductCodes = async (excludeId?: string): Promise<{ skus: Set<stri
   return { skus, barcodes };
 };
 
+const normalizeExpiryDate = (value?: string | null): string | null => {
+  const trimmed = (value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+};
+
+const writeProductStockRows = async (rows: ProductStock[]): Promise<{ branch_id: string; message: string }[]> => {
+  if (!supabase || rows.length === 0) return [];
+
+  const { error } = await supabase
+    .from('product_stock')
+    .upsert(rows, { onConflict: 'product_id,branch_id' });
+  if (!error) return [];
+
+  const failures: { branch_id: string; message: string }[] = [];
+  for (const row of rows) {
+    const { error: rowError } = await supabase
+      .from('product_stock')
+      .upsert(row, { onConflict: 'product_id,branch_id' });
+    if (rowError) failures.push({ branch_id: row.branch_id, message: rowError.message });
+  }
+  return failures;
+};
+
+const mapProductWithStocks = (
+  product: Record<string, unknown>,
+  rawStocks: ProductStock[] | undefined,
+  allBranches: Branch[],
+  selectedBranchId?: string
+): Product => {
+  const prodStocks: ProductStock[] = (Array.isArray(rawStocks) ? rawStocks : []).map(st => ({
+    ...st,
+    quantity: Number(st.quantity ?? 0) || 0
+  }));
+
+  let stock = 0;
+  let branchId: string | undefined = undefined;
+
+  if (selectedBranchId && selectedBranchId !== 'all') {
+    const targetBranch = allBranches.find(b =>
+      b.id.toLowerCase() === selectedBranchId.toLowerCase() ||
+      b.code.toLowerCase() === selectedBranchId.toLowerCase() ||
+      b.name.toLowerCase() === selectedBranchId.toLowerCase()
+    );
+
+    const match = prodStocks.find(s => {
+      if (!s.branch_id) return false;
+      const sBranch = s.branch_id.trim().toLowerCase();
+      const selBranch = selectedBranchId.trim().toLowerCase();
+      if (sBranch === selBranch) return true;
+      if (targetBranch) {
+        return sBranch === targetBranch.id.toLowerCase() ||
+               sBranch === targetBranch.code.toLowerCase() ||
+               sBranch === targetBranch.name.toLowerCase();
+      }
+      return false;
+    });
+
+    stock = match ? match.quantity : 0;
+    branchId = targetBranch ? targetBranch.id : selectedBranchId;
+  } else {
+    stock = prodStocks.reduce((sum, s) => sum + s.quantity, 0);
+  }
+
+  return {
+    ...product,
+    stock,
+    branch_id: branchId,
+    stocks: prodStocks
+  } as Product;
+};
+
 const generateUniqueBarcode = async (taken: Set<string>, excludeId?: string): Promise<string> => {
   let highest = 0;
   taken.forEach(code => {
@@ -574,60 +645,37 @@ export const dbService = {
           .select('*')
       ]);
 
-      if (prodErr) {
-        // Fallback to simple select if nested join failed
-        const { data: fallbackProducts, error: fallbackErr } = await supabase
-          .from('products')
-          .select('*')
-          .order('created_at', { ascending: false, nullsFirst: false });
-        if (fallbackErr) throw fallbackErr;
-        return (fallbackProducts || []).map(p => ({ ...p, stock: Number(p.stock) || 0, stocks: [] }));
-      }
-
       const allBranches: Branch[] = branchesData || [];
+
+      if (prodErr) {
+        // Fallback to separate queries if the nested join is unavailable
+        const [{ data: fallbackProducts, error: fallbackErr }, { data: fallbackStocks, error: stockErr }] = await Promise.all([
+          supabase
+            .from('products')
+            .select('*')
+            .order('created_at', { ascending: false, nullsFirst: false }),
+          supabase
+            .from('product_stock')
+            .select('*')
+        ]);
+        if (fallbackErr) throw fallbackErr;
+        if (stockErr) throw stockErr;
+
+        const stocksByProduct = new Map<string, ProductStock[]>();
+        (fallbackStocks || []).forEach(st => {
+          const list = stocksByProduct.get(st.product_id) || [];
+          list.push(st);
+          stocksByProduct.set(st.product_id, list);
+        });
+
+        return (fallbackProducts || []).map(p =>
+          mapProductWithStocks(p, stocksByProduct.get(p.id) || [], allBranches, selectedBranchId)
+        );
+      }
 
       return (products || []).map(p => {
         const embeddedStocks = (p as Record<string, unknown>).product_stock as ProductStock[] | undefined;
-        const prodStocks: ProductStock[] = (Array.isArray(embeddedStocks) ? embeddedStocks : []).map(st => ({
-          ...st,
-          quantity: Number(st.quantity ?? 0) || 0
-        }));
-
-        let stock = 0;
-        let branchId: string | undefined = undefined;
-
-        if (selectedBranchId && selectedBranchId !== 'all') {
-          const targetBranch = allBranches.find(b =>
-            b.id.toLowerCase() === selectedBranchId.toLowerCase() ||
-            b.code.toLowerCase() === selectedBranchId.toLowerCase() ||
-            b.name.toLowerCase() === selectedBranchId.toLowerCase()
-          );
-
-          const match = prodStocks.find(s => {
-            if (!s.branch_id) return false;
-            const sBranch = s.branch_id.trim().toLowerCase();
-            const selBranch = selectedBranchId.trim().toLowerCase();
-            if (sBranch === selBranch) return true;
-            if (targetBranch) {
-              return sBranch === targetBranch.id.toLowerCase() ||
-                     sBranch === targetBranch.code.toLowerCase() ||
-                     sBranch === targetBranch.name.toLowerCase();
-            }
-            return false;
-          });
-
-          stock = match ? (Number(match.quantity) || 0) : 0;
-          branchId = targetBranch ? targetBranch.id : selectedBranchId;
-        } else {
-          stock = prodStocks.reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
-        }
-
-        return {
-          ...p,
-          stock,
-          branch_id: branchId,
-          stocks: prodStocks
-        };
+        return mapProductWithStocks(p, embeddedStocks, allBranches, selectedBranchId);
       });
     },
 
@@ -638,15 +686,19 @@ export const dbService = {
         supabase.from('product_stock').select('*').eq('product_id', id)
       ]);
       if (prodErr) throw prodErr;
+      if (stockErr) throw stockErr;
       if (!prod) return null;
 
-      const prodStocks: ProductStock[] = stocks || [];
+      const prodStocks: ProductStock[] = (stocks || []).map(st => ({
+        ...st,
+        quantity: Number(st.quantity ?? 0) || 0
+      }));
       let stock = 0;
       if (branchId && branchId !== 'all') {
         const match = prodStocks.find(s => s.branch_id === branchId);
         stock = match ? match.quantity : 0;
       } else {
-        stock = prodStocks.reduce((sum, s) => sum + (s.quantity || 0), 0);
+        stock = prodStocks.reduce((sum, s) => sum + s.quantity, 0);
       }
 
       return {
@@ -753,27 +805,65 @@ export const dbService = {
         }
         throw prodErr;
       }
-      // Insert one row per branch into product_stock
-      const stockRows: ProductStock[] = branchesList.map(branch => {
-        const customStock = prod.stocks?.find(s => s.branch_id === branch.id);
-        const qty = customStock !== undefined
-          ? Math.max(0, Number(customStock.quantity) || 0)
-          : (branch.id === targetBranchId ? initialStockQty : 0);
-        return {
-          id: `pstock-${productId}-${branch.id}`,
-          product_id: productId,
-          branch_id: branch.id,
-          quantity: qty,
-          updated_at: now
-        };
+      const requestedStocks = (prod.stocks || []).filter(st => st && st.branch_id);
+      const requestedTotal = requestedStocks.length > 0
+        ? requestedStocks.reduce((sum, st) => sum + Math.max(0, Number(st.quantity) || 0), 0)
+        : initialStockQty;
+      const stockBranchIds = requestedStocks.length > 0
+        ? Array.from(new Set(requestedStocks.map(st => st.branch_id)))
+        : (targetBranchId ? [targetBranchId] : []);
+
+      const stockRows: ProductStock[] = branchesList
+        .filter(branch => stockBranchIds.includes(branch.id))
+        .map(branch => {
+          const customStock = requestedStocks.find(st => st.branch_id === branch.id);
+          const qty = customStock !== undefined
+            ? Math.max(0, Number(customStock.quantity) || 0)
+            : (branch.id === targetBranchId ? initialStockQty : 0);
+          return {
+            id: `pstock-${productId}-${branch.id}`,
+            product_id: productId,
+            branch_id: branch.id,
+            quantity: qty,
+            updated_at: now
+          };
+        });
+
+      if (stockRows.length === 0 && requestedTotal > 0) {
+        const { data: deletedRows } = await supabase
+          .from('products')
+          .delete()
+          .eq('id', productId)
+          .select('id');
+        const removed = Array.isArray(deletedRows) && deletedRows.length > 0;
+        const error = new Error(
+          removed
+            ? 'Product could not be saved because no valid branch was selected for its stock.'
+            : 'Product was created, but no valid branch was found for its stock. Assign a branch and set the stock again.'
+        ) as Error & { productCreated?: boolean };
+        if (!removed) error.productCreated = true;
+        throw error;
+      }
+
+      const stockFailures = await writeProductStockRows(stockRows);
+      const fatalStockFailures = stockFailures.filter(failure => {
+        const row = stockRows.find(r => r.branch_id === failure.branch_id);
+        return (row?.quantity ?? 0) > 0;
       });
-
-      const { error: stockErr } = await supabase
-        .from('product_stock')
-        .insert(stockRows);
-
-      if (stockErr) {
-        console.warn('product_stock insert error on product create:', stockErr);
+      if (fatalStockFailures.length > 0) {
+        const { data: deletedRows } = await supabase
+          .from('products')
+          .delete()
+          .eq('id', productId)
+          .select('id');
+        const removed = Array.isArray(deletedRows) && deletedRows.length > 0;
+        const error = new Error(
+          removed
+            ? `Could not save inventory stock (${fatalStockFailures[0].message}). The product was not created.`
+            : `Product was created, but its stock could not be saved (${fatalStockFailures[0].message}). Open the product and set the stock again.`
+        ) as Error & { productCreated?: boolean };
+        if (!removed) error.productCreated = true;
+        throw error;
       }
 
       for (const st of stockRows) {
@@ -801,11 +891,18 @@ export const dbService = {
       notifyDataChanged('products');
       notifyDataChanged('product_stock');
 
+      try {
+        const createdProduct = await dbService.products.getById(productId, prod.branch_id);
+        if (createdProduct) return createdProduct;
+      } catch (readErr) {
+        console.warn('Could not re-read created product, returning written values:', readErr);
+      }
+
       const totalComputedStock = stockRows.reduce((sum, s) => sum + s.quantity, 0);
       return {
         ...insertedProduct,
-        stock: targetBranchId ? (stockRows.find(s => s.branch_id === targetBranchId)?.quantity ?? totalComputedStock) : totalComputedStock,
-        branch_id: targetBranchId,
+        stock: totalComputedStock,
+        branch_id: prod.branch_id,
         branch_name: targetBranchName || undefined,
         stocks: stockRows
       };
@@ -870,53 +967,58 @@ export const dbService = {
       const now = new Date().toISOString();
 
       if (Array.isArray(updateStocks) && updateStocks.length > 0) {
-        // Batch upsert all stock rows at once
-        const stockUpsertRows = (updateStocks as ProductStock[]).map(st => ({
-          id: (currentStocks || []).find(s => s.branch_id === st.branch_id)?.id || `pstock-${id}-${st.branch_id}`,
-          product_id: id,
-          branch_id: st.branch_id,
-          quantity: Math.max(0, Number(st.quantity) || 0),
-          updated_at: now
-        }));
-
-        const { error: batchStockErr } = await supabase
-          .from('product_stock')
-          .upsert(stockUpsertRows, { onConflict: 'product_id,branch_id' });
-
-        if (batchStockErr) {
-          console.warn('product_stock batch upsert error:', batchStockErr);
-        }
-
-        // Fetch branch names for inventory transactions
-        const { data: branchesForTx } = await supabase.from('branches').select('id, name');
-        const branchNameMap = new Map((branchesForTx || []).map(b => [b.id, b.name]));
-
-        // Record inventory transactions for changed quantities
-        const txRows = stockUpsertRows
-          .map(st => {
-            const oldQty = (currentStocks || []).find(s => s.branch_id === st.branch_id)?.quantity || 0;
-            const diff = st.quantity - Number(oldQty);
-            if (diff === 0) return null;
+        const stockUpsertRows: ProductStock[] = (updateStocks as ProductStock[])
+          .map((st): ProductStock | null => {
+            const existing = (currentStocks || []).find(s => s.branch_id === st.branch_id);
+            const quantity = Math.max(0, Number(st.quantity) || 0);
+            if (existing && Number(existing.quantity) === quantity) return null;
             return {
-              id: generateId(),
+              id: existing?.id || `pstock-${id}-${st.branch_id}`,
               product_id: id,
-              product_name: (catalogUpdates.name as string) || current.name,
               branch_id: st.branch_id,
-              branch_name: branchNameMap.get(st.branch_id) || DEFAULT_BRANCH_NAME,
-              type: diff > 0 ? 'stock-in' : 'stock-out',
-              quantity: Math.abs(diff),
-              notes: `Stock adjusted manually. Old: ${oldQty}, New: ${st.quantity}`,
-              performed_by: performedBy,
-              created_at: now
+              quantity,
+              updated_at: now
             };
           })
-          .filter(Boolean);
+          .filter((row): row is ProductStock => row !== null);
 
-        if (txRows.length > 0) {
-          try {
-            await supabase.from('inventory_transactions').insert(txRows);
-          } catch (txErr) {
-            console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+        if (stockUpsertRows.length > 0) {
+          const stockFailures = await writeProductStockRows(stockUpsertRows);
+          if (stockFailures.length > 0) {
+            throw new Error(`Product details were saved, but stock could not be updated (${stockFailures[0].message}). Please save the stock again.`);
+          }
+
+          // Fetch branch names for inventory transactions
+          const { data: branchesForTx } = await supabase.from('branches').select('id, name');
+          const branchNameMap = new Map((branchesForTx || []).map(b => [b.id, b.name]));
+
+          // Record inventory transactions for changed quantities
+          const txRows = stockUpsertRows
+            .map(st => {
+              const oldQty = (currentStocks || []).find(s => s.branch_id === st.branch_id)?.quantity || 0;
+              const diff = st.quantity - Number(oldQty);
+              if (diff === 0) return null;
+              return {
+                id: generateId(),
+                product_id: id,
+                product_name: (catalogUpdates.name as string) || current.name,
+                branch_id: st.branch_id,
+                branch_name: branchNameMap.get(st.branch_id) || DEFAULT_BRANCH_NAME,
+                type: diff > 0 ? 'stock-in' : 'stock-out',
+                quantity: Math.abs(diff),
+                notes: `Stock adjusted manually. Old: ${oldQty}, New: ${st.quantity}`,
+                performed_by: performedBy,
+                created_at: now
+              };
+            })
+            .filter(Boolean);
+
+          if (txRows.length > 0) {
+            try {
+              await supabase.from('inventory_transactions').insert(txRows);
+            } catch (txErr) {
+              console.warn('inventory_transactions insert failed (non-fatal):', txErr);
+            }
           }
         }
       } else if (updateStock !== undefined) {
@@ -926,7 +1028,7 @@ export const dbService = {
         const newQty = Math.max(0, Number(updateStock) || 0);
 
         if (newQty !== oldQty || !currentBranchStock) {
-          await supabase
+          const { error: stockErr } = await supabase
             .from('product_stock')
             .upsert({
               id: currentBranchStock?.id || `pstock-${id}-${targetBranchId}`,
@@ -935,6 +1037,9 @@ export const dbService = {
               quantity: newQty,
               updated_at: now
             }, { onConflict: 'product_id,branch_id' });
+          if (stockErr) {
+            throw new Error(`Stock could not be updated (${stockErr.message}). Please try again.`);
+          }
 
           const diff = newQty - oldQty;
           if (diff !== 0) {
@@ -964,8 +1069,13 @@ export const dbService = {
       notifyDataChanged('product_stock');
 
       const targetBranchStr = typeof updateBranchId === 'string' ? updateBranchId : undefined;
-      const updatedProd = await dbService.products.getById(id, targetBranchStr);
-      return updatedProd || { ...current, ...updates };
+      try {
+        const updatedProd = await dbService.products.getById(id, targetBranchStr);
+        if (updatedProd) return updatedProd;
+      } catch (readErr) {
+        console.warn('Could not re-read updated product, returning input values:', readErr);
+      }
+      return { ...current, ...updates } as Product;
     },
 
     async restock(id: string, quantity: number, performedBy: string, branchId?: string, branchName?: string): Promise<Product> {
@@ -1037,7 +1147,13 @@ export const dbService = {
       notifyDataChanged('products');
       notifyDataChanged('product_stock');
 
-      return (await dbService.products.getById(id, targetBranchId)) || { ...current, stock: newStock };
+      try {
+        const restocked = await dbService.products.getById(id, targetBranchId);
+        if (restocked) return restocked;
+      } catch (readErr) {
+        console.warn('Could not re-read restocked product, returning written values:', readErr);
+      }
+      return { ...current, stock: newStock };
     },
 
     async bulkImport(importedItems: Partial<Product>[], performedBy: string, branchId?: string, branchName?: string): Promise<number> {
@@ -1098,19 +1214,17 @@ export const dbService = {
           unit_amount: item.unit_amount || 1,
           unit_name: item.unit_name || 'ခု',
           price_variant: item.price_variant || '',
-          expiry_date: item.expiry_date || '',
+          expiry_date: normalizeExpiryDate(item.expiry_date),
           updated_at: new Date().toISOString(),
           created_at: item.created_at || now,
         });
 
-        branchesList.forEach(branch => {
-          stockRowsToInsert.push({
-            id: `pstock-${idKey}-${branch.id}`,
-            product_id: idKey,
-            branch_id: branch.id,
-            quantity: branch.id === targetBranchId ? stockQty : 0,
-            updated_at: now
-          });
+        stockRowsToInsert.push({
+          id: `pstock-${idKey}-${targetBranchId}`,
+          product_id: idKey,
+          branch_id: targetBranchId,
+          quantity: stockQty,
+          updated_at: now
         });
 
         if (stockQty > 0) {
@@ -1142,11 +1256,9 @@ export const dbService = {
       }
 
       if (stockRowsToInsert.length > 0) {
-        const { error: stockErr } = await supabase
-          .from('product_stock')
-          .upsert(stockRowsToInsert, { onConflict: 'product_id,branch_id' });
-        if (stockErr) {
-          console.warn('product_stock upsert error during bulk import:', stockErr);
+        const stockFailures = await writeProductStockRows(stockRowsToInsert);
+        if (stockFailures.length > 0) {
+          throw new Error(`Products were imported, but stock could not be saved (${stockFailures[0].message}). Import again or set the stock manually.`);
         }
       }
 

@@ -58,7 +58,7 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
     deleteRequests, setDeleteRequests,
     businessProfile: storeBusinessProfile, setBusinessProfile,
     cashFlowEntries, setCashFlowEntries,
-    isLoading, loadData
+    isLoading, loadError, loadData
   } = usePosStore();
 
   const businessProfile = storeBusinessProfile || DEFAULT_BUSINESS_PROFILE;
@@ -917,6 +917,18 @@ export default function OwnerDashboard({ user, onLogout }: OwnerDashboardProps) 
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {loadError && !isLoading && (
+          <div className="mx-3 mt-3 sm:mx-6 sm:mt-4 shrink-0 p-3 rounded-xl border border-red-200 bg-red-50 text-xs text-red-700 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <span className="flex-1 font-semibold">{loadError}</span>
+            <button
+              onClick={() => loadData()}
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {/* Content Body */}
         <div className="p-3 sm:p-6 md:p-8 flex-1 overflow-y-auto android-scroll">
           {isLoading || isTabChanging ? (

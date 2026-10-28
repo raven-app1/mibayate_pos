@@ -28,7 +28,8 @@ describe('usePosStore', () => {
       deleteRequests: [],
       businessProfile: null,
       cashFlowEntries: [],
-      isLoading: true
+      isLoading: true,
+      loadError: null
     });
     vi.clearAllMocks();
   });
